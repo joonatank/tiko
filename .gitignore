@@ -2,9 +2,6 @@
 *.o
 *.class
 
-# Java
-*.jar
-
 # vim
 *.swp
 *.swo
