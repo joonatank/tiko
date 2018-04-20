@@ -7,7 +7,11 @@
 
 package tiko;
 
+// User input
 import java.util.Scanner;
+// SQL
+import java.sql.Connection;
+import java.sql.DriverManager;
 
 // @todo add SQL connection
 class TikoMain
@@ -20,7 +24,7 @@ class TikoMain
 
     public static void error(String str)
     {
-        System.out.println(str);
+        System.err.println(str);
     }
 
     /// Return false if program should exit
@@ -66,6 +70,21 @@ class TikoMain
     /// Read user commands and sent them to the parser
     public static void main(String [] args)
     {
+        Connection c = null;
+        try {
+            String username = "postgres";
+            String password = "postgres";
+            Class.forName("org.postgresql.Driver");
+            c = DriverManager
+                .getConnection("jdbc:postgresql://localhost:5432/divari",
+                username, password);
+        } catch (Exception e) {
+             e.printStackTrace();
+             error(e.getClass().getName()+": "+e.getMessage());
+             System.exit(0);
+        }
+        print("Opened database successfully");
+
         Scanner scanner = new Scanner(System.in);
         String line = "";
         while (true)
