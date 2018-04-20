@@ -1,0 +1,66 @@
+T1 Kirjautuu
+in: login
+out: "Name"
+in:
+out: "password"
+in:
+
+T1 Rekisteröityy
+in: register
+out: "Name"
+in:
+out: "password"
+in:
+out: "Address"
+in:
+out: "phone"
+in:
+out: "email"
+in:
+
+
+T2 Lisataan kirja D1 tietokantaan
+in: add_book
+out: "ISBN"
+in:
+
+T3
+in: add_copy
+out: "ISBN"
+in:
+out: "price"
+in:
+out: "weight"
+in:
+
+T4
+in: order
+out: "ISBN"
+in:
+
+T4.1 (search)
+in: search
+out: "Crtiteria: use #title #author #class or #type to specify where to search"
+in: Maltese
+out: Corto Maltese Etelämerellä
+
+T4.2 (search)
+in: search
+out: "Crtiteria: use #title #author #class or #type to specify where to search"
+in: #title Maltese
+out: Corto Maltese Etelämerellä
+
+T4.3 (search)
+in: search
+out: "Crtiteria: use #title #author #class or #type to specify where to search"
+in: #author Maltese
+out: {}
+
+
+T5
+
+T6
+
+T7
+
+T8

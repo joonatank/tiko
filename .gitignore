@@ -1,0 +1,12 @@
+# Intermediate build files; object files
+*.o
+*.class
+
+# Java
+*.jar
+
+# vim
+*.swp
+*.swo
+*~
+
