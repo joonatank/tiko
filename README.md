@@ -1,10 +1,12 @@
 # Tietokannat harkkatyö
 
 ## Compile
-javac tiko/TikoMain.java
+Linux: make
+Windows: javac tiko\TikoMain.java
 
 ## Run
-java tiko/TikoMain
+Linux: run.sh
+Windows: run.bat
 
 ## Adding files
 If you add files create a makefile (or a script) since you need to call

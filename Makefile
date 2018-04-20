@@ -6,10 +6,13 @@ SOURCES = tiko/TikoMain.java
 
 all : $(TARGET)
 
-clean :
-    rm tiko/*.class
+.PHONY: clean
+
+clean:
+	rm tiko/*.class
 
 CMD = javac
 
 $(TARGET):$(SOURCES)
-    ${CMD} $(SOURCES)
+	${CMD} $(SOURCES)
+
