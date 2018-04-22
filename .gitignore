@@ -7,3 +7,6 @@
 *.swo
 *~
 
+# vscode
+.vscode/
+
