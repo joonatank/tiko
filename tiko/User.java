@@ -9,7 +9,7 @@ package tiko;
 // c-style struct
 class User
 {
-    User() {}
+    User() { admin = false; }
 
     public boolean valid()
     { return this.email != null; }
@@ -20,7 +20,8 @@ class User
     public String name;
     public String address;
     public String phonenumber;
-    public String priviledges;
+    // database admin
+    public boolean admin;
 
     public String toString()
     {

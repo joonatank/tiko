@@ -16,6 +16,7 @@ import java.sql.ResultSet;
 import java.sql.Statement;
 import java.sql.SQLException;
 import java.sql.PreparedStatement;
+import java.sql.Savepoint;
 // Regex
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -162,9 +163,27 @@ class TikoMain
         return false;
     }
 
+    /// Print the information of the user
     public static void info(User user, String[] params)
     {
         println(user.toString());
+    }
+
+    /// Convert an array of Strings into an SQL block
+    /// format: 'arr[0]', arr[1], ... , arr[n]
+    public static String toSQL(String [] arr)
+    {
+        String res = "";
+        for (String s : arr)
+        {
+            // comma-separate except for last element
+            if(res.length() != 0)
+            { res += (","); }
+            // add sql string quotes
+            res += ("'" + s +  "'");
+        }
+
+        return res;
     }
 
     /// register command has a form: register username password
@@ -173,7 +192,7 @@ class TikoMain
     public static boolean register(Connection conn, String[] params)
     {
         // @todo add SQL commands
-        print("register: " + "with " + params.length + " params");
+        log("TRACE", "register: " + "with " + params.length + " params");
 
         String pw_help = "at least 6 characters long, no whitespace";
         String email_help = "at least 6 characters long, no whitespace";
@@ -181,13 +200,42 @@ class TikoMain
         String email = inputPrompt("username", email_regex, email_help);
         // @todo check that username (email) is unique from the db
         String password = inputPrompt("password", password_regex, pw_help);
+        // @todo name regex
+        String name = inputPrompt("Name", address_regex, "");
         // @todo add confirm password
         // @todo fix regex
-        inputPrompt("Address", address_regex, "");
+        String address = inputPrompt("Address", address_regex, "");
         // @todo this needs space removal (of the input number)
-        inputPrompt("phonenumber", phone_regex, "");
+        String phone = inputPrompt("phonenumber", phone_regex, "");
 
-        // @todo SQL insert command here
+        Savepoint savePoint = null;
+        try {
+            savePoint = conn.setSavepoint("reg");
+            // @todo checking if the username is available before asking all the other details
+            // would be good UI design
+            Statement stmt = conn.createStatement();
+            stmt.execute("SET search_path to keskus");
+            String []arr = {email, name, password, address, phone, "user"};
+            String sql = "INSERT INTO kayttaja " // "(email, name, password, address, phone, priviledge) "
+                + "VALUES (" + toSQL(arr) + ")";
+            log("DEBUG", sql);
+            stmt.executeUpdate(sql);
+
+            stmt.close();
+            conn.commit();
+
+            return true;
+        } catch (SQLException e) {
+            // @todo check that this is right error type
+            // Aight vendor specific error codes and what not... fix this at some point.
+            println("USER already existed");
+            error("Error: " + e.getMessage());
+            // fuck java exceptions
+            try {
+                if(savePoint != null)
+                { conn.rollback(savePoint); }
+            } catch(Exception _e) {}
+        }
         return false;
     }
 
