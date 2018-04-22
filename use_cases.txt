@@ -5,7 +5,7 @@ in:
 out: "password"
 in:
 
-T1 Rekisteröityy
+T1 Rekisterï¿½ityy
 in: register
 out: "Name"
 in:
@@ -23,10 +23,23 @@ T2 Lisataan kirja D1 tietokantaan
 in: add_book
 out: "ISBN"
 in:
+out: "(book info) already exist" / "name:"
+in:
+out: "author:"
+in:
+out: "book name:"
+in:
+out: "type:"
+in:
+out: "category"
+in:
+
 
 T3
 in: add_copy
 out: "ISBN"
+in:
+out: "shop name"
 in:
 out: "price"
 in:
@@ -42,13 +55,13 @@ T4.1 (search)
 in: search
 out: "Crtiteria: use #title #author #class or #type to specify where to search"
 in: Maltese
-out: Corto Maltese Etelämerellä
+out: Corto Maltese Etelï¿½merellï¿½
 
 T4.2 (search)
 in: search
 out: "Crtiteria: use #title #author #class or #type to specify where to search"
 in: #title Maltese
-out: Corto Maltese Etelämerellä
+out: Corto Maltese Etelï¿½merellï¿½
 
 T4.3 (search)
 in: search

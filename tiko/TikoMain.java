@@ -69,8 +69,31 @@ class TikoMain
         print("register: " + params);
     }
 
+    // for each input string, ask user to input answer, return user answers
+    public static String[] queryUserInput(String[] query, Scanner s) 
+    {
+        String[] userInput = new String[input.length];
+        for (int i = 0; i < query.length; i++) {
+            print(query[i] + ": ");
+            userInput[i] = s.nextLine();
+        }
+        return userInput;
+    }
+
+    // unsafe sql update
+    public static int sqlUpdate(Connection c, String sql)
+    {
+        try {
+            Statement stmt = c.createStatement();
+            return stmt.executeUpdate(sql);
+        } catch (SQLException e) {
+            error("Error: " + e.getMessage());
+            return 0;
+        }
+    }
+    
     // insert book info to the div1 database
-    public static void addBook(Connection c)
+    public static void addBook(Connection c, Scanner s)
     {
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
@@ -84,23 +107,20 @@ class TikoMain
             error("Error: " + e.getMessage());
         }
         
+        String[] query = new String[]{"author", "name", "type","category", "isbn"};
+        String[] usrInput = queryUserInput(query, s);
         String sql = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
-        // @todo query user input
+        
         // @todo find out how to generate ids automaticly (in sql?)
         int id = 1;
-        String author = "author";
-        String name = "name";
-        String type = "type";
-        String category = "category";
-        String isbn = "123-123";
         try {
             PreparedStatement addBook = c.prepareStatement(sql);
             addBook.setInt(1, id);
-            addBook.setString(2, author);
-            addBook.setString(3, name);
-            addBook.setString(4, type);
-            addBook.setString(5, category);
-            addBook.setString(6, isbn);
+            addBook.setString(2, usrInput[0]);
+            addBook.setString(3, usrInput[1]);
+            addBook.setString(4, usrInput[2]);
+            addBook.setString(5, usrInput[3]);
+            addBook.setString(6, usrInput[4]);
             int ret = addBook.executeUpdate();
             print("Added " + ret + " book to kirja");
         } catch (SQLException e) {
@@ -116,11 +136,27 @@ class TikoMain
         
         // @todo query existing book, and divari
         String insertTeos = "INSET INTO teos VALUES (?, ?, ?, ?)";
-        // @todo read input
+        String[] usrInput = queryUserInput(new String[]{"paino", "hinta" }, s);
         float paino = 0.0f;
         int kirjaNro = 0;
         float hinta = 0.0f;
         int divariId = 0;
+        String isbn = "";
+        try {
+            String sql = "SELECT nro FROM kirja WHERE isbn = ?";
+            PreparedStatement bookId = c.prepareStatement(sql);
+            bookId.setString(1, isbn);
+            ResultSet rs = bookId.executeQuery();
+            if (rs.next()) {
+                kirjaNro = rs.getInt("nro");
+            } else {
+                // @todo add new book info
+            }
+            bookId.close();
+        } catch (SQLException e) {
+            error("Error: " + e.getMessage());
+            return;
+        }
         try {
             PreparedStatement addCopy = c.prepareStatement(insertTeos);
             addCopy.setFloat(1, paino);
