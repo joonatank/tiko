@@ -19,6 +19,8 @@ import java.sql.SQLException;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+import tiko.User;
+
 // @todo add SQL connection
 class TikoMain
 {
@@ -58,7 +60,7 @@ class TikoMain
     /// Return false if program should exit
     /// True otherwise
     /// Executes the users commands
-    public static boolean parseCmd(Connection conn, String command)
+    public static boolean parseCmd(Connection conn, User user, String command)
     {
         // @todo this should be ArrayList with each parameter separated
         String[] arr = command.split(" ", 0);
@@ -70,7 +72,7 @@ class TikoMain
         switch(cmd)
         {
             case "login":
-                login(conn, params);
+                login(conn, user, params);
                 return true;
             case "register":
                 register(conn, params);
@@ -96,14 +98,14 @@ class TikoMain
     /// Keeps asking till user provides correct username/password
     /// @todo provide a method for escaping from the loop
     /// @todo return a User when connected
-    public static void login(Connection conn, String[] params)
+    public static void login(Connection conn, User user, String[] params)
     {
         log("TRACE", "login: " + "with " + params.length + " params");
 
-        String user = inputPrompt("username", password_regex, "");
+        String username = inputPrompt("username", password_regex, "");
         String pw = inputPrompt("password", password_regex, "");
 
-        log("TRACE", "username = " + user);
+        log("TRACE", "username = " + username);
         log("TRACE", "password = " + pw);
         // select statement
         try {
@@ -112,27 +114,22 @@ class TikoMain
                             ResultSet.CONCUR_READ_ONLY );
             boolean ret = stmt.execute( "SET SEARCH_PATH TO KESKUS;");
             String query = "select * from kayttaja where " +
-                "email='" + user +"'" + " and " +
+                "email='" + username +"'" + " and " +
                 "salasana='" + pw + "'" +
                 ";";
             ResultSet rs = stmt.executeQuery(query);
             if ( rs.next() ) {
-                String username = rs.getString("email");
-                String name = rs.getString("nimi");
-                String passwd = rs.getString("salasana");
-                String address = rs.getString("osoite");
-                String phone = rs.getString("puh_nro");
-                System.out.println( "username = " + username);
-                System.out.println( "NAME = " + name );
-                System.out.println( "password = " + passwd);
-                System.out.println( "ADDRESS = " + address );
-                System.out.println( "phonenumber = " + phone);
-                System.out.println();
+                user.email = rs.getString("email");
+                user.name = rs.getString("nimi");
+                // don't save the password
+                user.address = rs.getString("osoite");
+                user.phonenumber = rs.getString("puh_nro");
 
                 // check the database for the user and password
                 // if found return user struct
                 // if not repromt (invalid username)
                 print("LOGIN in");
+                print(user.toString());
 
                 rs.close();
                 stmt.close();
@@ -142,17 +139,18 @@ class TikoMain
                 stmt.close();
 
                 print("Invalid username or password");
-                login(conn, params);
+                login(conn, user, params);
             }
 
         } catch (SQLException e) {
              e.printStackTrace();
              error(e.getClass().getName()+": "+e.getMessage());
         }
-
     }
 
     /// register command has a form: register username password
+    /// @return true if registered, false otherwise
+    /// doesn't return User object by design, you have to login afterwards
     public static void register(Connection conn, String[] params)
     {
         // @todo add SQL commands
@@ -186,16 +184,20 @@ class TikoMain
                 username, password);
             conn.setAutoCommit(false);
 
-            print("Opened database successfully");
+            log("TRACE", "Opened database successfully");
 
             Scanner scanner = new Scanner(System.in);
             String line = "";
+            User user = new User();
             while (true)
             {
                 // @todo print the logged in username (ala Linux) if the user has logged in
-                print("Command: ");
+                if(user.valid())
+                { System.out.print(user.email + " : "); }
+                else
+                { System.out.print("Command: "); }
                 line = scanner.nextLine();
-                if (!parseCmd(conn, line))
+                if (!parseCmd(conn, user, line))
                 { break; }
             }
             conn.close();
@@ -203,7 +205,6 @@ class TikoMain
              e.printStackTrace();
              error(e.getClass().getName()+": "+e.getMessage());
              System.exit(0);
-        } finally {
         }
     }
 }
