@@ -25,13 +25,18 @@ import tiko.User;
 // @todo add SQL connection
 class TikoMain
 {
+    /// Helpers for printin and formating
     public static void log(String tag, String str)
     {
         System.out.println(tag + ": " + str);
     }
 
-    /// Helpers for printin and formating
     public static void print(String str)
+    {
+        System.out.print(str + " ");
+    }
+
+    public static void println(String str)
     {
         System.out.println(str);
     }
@@ -78,6 +83,9 @@ class TikoMain
             case "register":
                 register(conn, params);
                 return true;
+            case "info":
+                info(user, params);
+                return true;
             case "exit":
             case "quit":
                 return false;
@@ -88,22 +96,24 @@ class TikoMain
     }
 
     // todo username==email, fix regex to that format
-    static final String username_regex = "\\w+";
+    static final String email_regex = "\\S+@\\S+\\.\\w+";
     static final String password_regex = "\\S{6}\\S*";
     // @todo Address needs to have whitespace
-    static final String address_regex = "\\w+";
-    // @todo how many numbers?
-    static final String phone_regex = "\\d+";
+    static final String address_regex = ".+";
+    // @todo how many numbers? 6-10
+    // @todo this needs the option for +358 numbers (or other country codes)
+    static final String phone_regex = "\\d{6,10}";
 
     /// Connect to the SQL server and verify
     /// Keeps asking till user provides correct username/password
     /// @todo provide a method for escaping from the loop
     /// @todo return a User when connected
-    public static void login(Connection conn, User user, String[] params)
+    /// @return true if logged in succesfully, false otherwise
+    public static boolean login(Connection conn, User user, String[] params)
     {
         log("TRACE", "login: " + "with " + params.length + " params");
 
-        String username = inputPrompt("username", password_regex, "");
+        String username = inputPrompt("username", email_regex, "");
         String pw = inputPrompt("password", password_regex, "");
 
         log("TRACE", "username = " + username);
@@ -129,46 +139,56 @@ class TikoMain
                 // check the database for the user and password
                 // if found return user struct
                 // if not repromt (invalid username)
-                print("LOGIN in");
-                print(user.toString());
+                println("Logged in Success");
 
                 rs.close();
                 stmt.close();
+
+                return true;
             }
             else {
                 rs.close();
                 stmt.close();
 
                 print("Invalid username or password");
-                login(conn, user, params);
+                return login(conn, user, params);
             }
 
         } catch (SQLException e) {
              e.printStackTrace();
              error(e.getClass().getName()+": "+e.getMessage());
         }
+
+        return false;
+    }
+
+    public static void info(User user, String[] params)
+    {
+        println(user.toString());
     }
 
     /// register command has a form: register username password
     /// @return true if registered, false otherwise
     /// doesn't return User object by design, you have to login afterwards
-    public static void register(Connection conn, String[] params)
+    public static boolean register(Connection conn, String[] params)
     {
         // @todo add SQL commands
         print("register: " + "with " + params.length + " params");
 
         String pw_help = "at least 6 characters long, no whitespace";
+        String email_help = "at least 6 characters long, no whitespace";
 
-        String username = inputPrompt("username", username_regex, "");
+        String email = inputPrompt("username", email_regex, email_help);
         // @todo check that username (email) is unique from the db
         String password = inputPrompt("password", password_regex, pw_help);
         // @todo add confirm password
         // @todo fix regex
         inputPrompt("Address", address_regex, "");
-        // @todo fix regex
+        // @todo this needs space removal (of the input number)
         inputPrompt("phonenumber", phone_regex, "");
-        // @todo fix regex
-        //inputPrompt("email", "\\w+/g", "");
+
+        // @todo SQL insert command here
+        return false;
     }
 
     // insert book info to the div1 database
@@ -185,7 +205,7 @@ class TikoMain
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
         }
-        
+
         String sql = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
         // @todo query user input
         // @todo find out how to generate ids automaticly (in sql?)
@@ -215,7 +235,7 @@ class TikoMain
     {
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
-        
+
         // @todo query existing book, and divari
         String insertTeos = "INSET INTO teos VALUES (?, ?, ?, ?)";
         // @todo read input
