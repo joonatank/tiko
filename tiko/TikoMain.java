@@ -47,6 +47,23 @@ class TikoMain
         System.err.println(str);
     }
 
+    /// Convert an array of Strings into an SQL block
+    /// format: 'arr[0]', arr[1], ... , arr[n]
+    public static String toSQL(String [] arr)
+    {
+        String res = "";
+        for (String s : arr)
+        {
+            // comma-separate except for last element
+            if(res.length() != 0)
+            { res += (","); }
+            // add sql string quotes
+            res += ("'" + s +  "'");
+        }
+
+        return res;
+    }
+
     public static String inputPrompt(String fieldName, String regex, String help)
     {
         Scanner scanner = new Scanner(System.in);
@@ -136,6 +153,9 @@ class TikoMain
                 // don't save the password
                 user.address = rs.getString("osoite");
                 user.phonenumber = rs.getString("puh_nro");
+                String priv = rs.getString("kayttooikeus");
+                if (priv.trim().equals("admin"))
+                { user.admin = true; }
 
                 // check the database for the user and password
                 // if found return user struct
@@ -169,36 +189,20 @@ class TikoMain
         println(user.toString());
     }
 
-    /// Convert an array of Strings into an SQL block
-    /// format: 'arr[0]', arr[1], ... , arr[n]
-    public static String toSQL(String [] arr)
-    {
-        String res = "";
-        for (String s : arr)
-        {
-            // comma-separate except for last element
-            if(res.length() != 0)
-            { res += (","); }
-            // add sql string quotes
-            res += ("'" + s +  "'");
-        }
-
-        return res;
-    }
-
     /// register command has a form: register username password
     /// @return true if registered, false otherwise
     /// doesn't return User object by design, you have to login afterwards
     public static boolean register(Connection conn, String[] params)
     {
-        // @todo add SQL commands
         log("TRACE", "register: " + "with " + params.length + " params");
 
         String pw_help = "at least 6 characters long, no whitespace";
         String email_help = "at least 6 characters long, no whitespace";
 
-        String email = inputPrompt("username", email_regex, email_help);
         // @todo check that username (email) is unique from the db
+        // checking if the username is available before asking all the other details
+        // would be good UI design
+        String email = inputPrompt("username", email_regex, email_help);
         String password = inputPrompt("password", password_regex, pw_help);
         // @todo name regex
         String name = inputPrompt("Name", address_regex, "");
@@ -211,8 +215,6 @@ class TikoMain
         Savepoint savePoint = null;
         try {
             savePoint = conn.setSavepoint("reg");
-            // @todo checking if the username is available before asking all the other details
-            // would be good UI design
             Statement stmt = conn.createStatement();
             stmt.execute("SET search_path to keskus");
             String []arr = {email, name, password, address, phone, "user"};
