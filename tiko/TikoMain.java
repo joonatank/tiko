@@ -172,15 +172,23 @@ class TikoMain
 
 
     /// Read user commands and sent them to the parser
+    /// Arguments
+    ///     databasename
+    ///     username (for db)
+    ///     password (for db)
+    /// for example: java tiko/TikoMain divari postgres postgres
+    ///         or : run.bat divari postgres postgres
+    ///         or : run.sh divari postgres postgres
     public static void main(String [] args)
     {
         Connection conn = null;
         try {
-            String username = "postgres";
-            String password = "postgres";
+            String dbname = args.length > 0 ? args[0] : "divari";
+            String username = args.length > 1 ? args[1] : "postgres";
+            String password = args.length > 2 ? args[2] : "postgres";
             Class.forName("org.postgresql.Driver");
             conn = DriverManager
-                .getConnection("jdbc:postgresql://localhost:5432/divari",
+                .getConnection("jdbc:postgresql://localhost:5432/" + dbname,
                 username, password);
             conn.setAutoCommit(false);
 
