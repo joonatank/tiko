@@ -17,6 +17,9 @@ import java.sql.Statement;
 import java.sql.SQLException;
 import java.sql.PreparedStatement;
 import java.sql.Savepoint;
+// time
+import java.time.LocalDate;
+import java.time.ZoneId;
 // Regex
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
@@ -81,6 +84,17 @@ class TikoMain
         }
     }
 
+    public static boolean loggedIn(User user)
+    {
+        boolean ret = (null != user && user.valid());
+        if(!ret)
+        {
+            println("You are not logged in.");
+        }
+
+        return ret;
+    }
+
     /// Return false if program should exit
     /// True otherwise
     /// Executes the users commands
@@ -96,13 +110,20 @@ class TikoMain
         switch(cmd)
         {
             case "login":
-                login(conn, user, params);
+                login(conn, user);
                 return true;
             case "register":
-                register(conn, params);
+                register(conn);
                 return true;
             case "info":
-                info(user, params);
+                info(user);
+                return true;
+            case "add_to_cart":
+                // @todo fix the book id
+                addToCart(conn, user, -1);
+                return true;
+            case "order":
+                order(conn, user);
                 return true;
             case "exit":
             case "quit":
@@ -127,9 +148,9 @@ class TikoMain
     /// @todo provide a method for escaping from the loop
     /// @todo return a User when connected
     /// @return true if logged in succesfully, false otherwise
-    public static boolean login(Connection conn, User user, String[] params)
+    public static boolean login(Connection conn, User user)
     {
-        log("TRACE", "login: " + "with " + params.length + " params");
+        log("TRACE", "login");
 
         String username = inputPrompt("username", email_regex, "");
         String pw = inputPrompt("password", password_regex, "");
@@ -172,7 +193,7 @@ class TikoMain
                 stmt.close();
 
                 print("Invalid username or password");
-                return login(conn, user, params);
+                return login(conn, user);
             }
 
         } catch (SQLException e) {
@@ -184,17 +205,20 @@ class TikoMain
     }
 
     /// Print the information of the user
-    public static void info(User user, String[] params)
+    public static void info(User user)
     {
+        if(!loggedIn(user))
+        { return; }
+
         println(user.toString());
     }
 
     /// register command has a form: register username password
     /// @return true if registered, false otherwise
     /// doesn't return User object by design, you have to login afterwards
-    public static boolean register(Connection conn, String[] params)
+    public static boolean register(Connection conn)
     {
-        log("TRACE", "register: " + "with " + params.length + " params");
+        log("TRACE", "register");
 
         String pw_help = "at least 6 characters long, no whitespace";
         String email_help = "at least 6 characters long, no whitespace";
@@ -238,6 +262,128 @@ class TikoMain
                 { conn.rollback(savePoint); }
             } catch(Exception _e) {}
         }
+        return false;
+    }
+
+    /// @return true if added succesfully, false otherwise
+    /// Iffy design decission to have the cart only for user that are logged in
+    /// in a real application we would use a temporary cart/user for this
+    ///
+    /// We assume that the bookId is valid and existing
+    /// so we can just push it directly into the SQL
+    /// @todo
+    /// need to add orderId into User if it's negative there is no order yet
+    /// if there is no order yet create a new one (SQL command)
+    /// if it's positive -> it exists -> update that order in the SQL
+    public static boolean addToCart(Connection conn, User user, int bookId)
+    {
+        if(!loggedIn(user))
+        { return false; }
+
+        // @todo check that the book id is valid
+        // i.e. it's not < and it's in the Database
+        // need one more query here for that
+
+        // @todo what is the logic with Statements
+        // do we close them only after finishing (finally block)
+        // while reusing them here?
+        // or do we need to close them before reuse
+        try {
+            // @todo need to add, if not existing
+            // so we need to add an extra field to the user or smth?
+            // yea, empty field that we start filling the first time user calls add to cart
+            // tilaus (tilaus_id, kayttajaref, pvm, tila)
+
+            // Find an already existing order where to add
+            Statement stmt = conn.createStatement();
+            stmt.execute("SET search_path to keskus");
+            String query = "select * from tilaus where " +
+                "tilaaja='" + user.email +"'" + " and " +
+                "tila='avoin'" +
+                ";";
+            stmt.executeQuery(query);
+            int orderId = -1;
+            ResultSet rs = stmt.executeQuery(query);
+            // found an order
+            if ( rs.next() ) {
+                orderId = rs.getInt("nro");
+
+                rs.close();
+                stmt.close();
+            }
+            // else take a count of the array and use that as new id
+            // create a new order with the id
+            else {
+                stmt.execute("SET search_path to keskus");
+                query = "select count(*) from tilaus";
+                stmt.executeQuery(query);
+                rs = stmt.executeQuery(query);
+                if ( rs.next() ) {
+                    orderId = rs.getInt("count");
+                }
+                else {
+                    error("Something really fucked up with count.");
+                }
+
+                println("Cool now we need to add a new order: " + orderId);
+
+                PreparedStatement pstm = conn.prepareStatement(
+                        "insert into tilaus"
+                      + " (nro, tilaaja, pvm, tila)"
+                      + " values (?, ?, ?, ?)");
+                pstm.setInt(1, orderId);
+                pstm.setString(2, user.email);
+                pstm.setObject( 3, LocalDate.now(ZoneId.of( "Europe/Helsinki" ) ));
+                pstm.setString(4, "avoin");
+
+                pstm.executeUpdate();
+
+                pstm.close();
+                conn.commit();
+            }
+
+            if(orderId < 0)
+            {
+                error("Something really fucked up with order ID.");
+                return false;
+            }
+
+            println("Cool now we need to update order: " + orderId);
+
+            // do the update
+            // @todo test, seems to work but we need the SQL table kirjat and valid id
+            PreparedStatement pstm = conn.prepareStatement(
+                    "insert into tilaus_kirjat"
+                  + " (tilaus_nro, kirja_nro)"
+                  + " values (?, ?)");
+            pstm.setInt(1, orderId);
+            pstm.setInt(2, bookId);
+
+            pstm.executeUpdate();
+
+            pstm.close();
+            conn.commit();
+
+        } catch (SQLException e) {
+            error("Error: " + e.getMessage());
+        }
+
+        return false;
+    }
+
+    /// @return true if ordered succesfully, false otherwise
+    public static boolean order(Connection conn, User user)
+    {
+        if(!loggedIn(user))
+        { return false; }
+
+        // @todo check the user.order field if it has an order
+        // yes -> retrieve the order from SQL
+        //        send it to the user
+        //        update it's state in the SQL
+        //        clear the user.order to -1
+        // no ->  exit with an error
+
         return false;
     }
 
