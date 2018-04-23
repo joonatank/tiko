@@ -266,7 +266,9 @@ class TikoMain
             getId.setString(1, value);
             ResultSet rs = getId.executeQuery();
             if ( rs.next() ) {
-                return rs.getInt("nro");
+                int id = rs.getInt("nro");
+                getId.close();
+                return id;
             }
         } catch (Exception e) {
             error("Error: " + e.getMessage());
@@ -274,12 +276,31 @@ class TikoMain
         return -1;
     }
 
+    // get next free id from table, set to right search path
+    // prior calling this method
+    public static int getNextFreeId(Connection c, String table)
+    {   
+        int id = -1;
+        try {
+            String sql = "SELECT COUNT( nro ) FROM " + table;
+            Statement stmt = c.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            if (rs.next())
+                id = rs.getInt("count");
+                stmt.close();
+                return id;
+        } catch (Exception e) {
+            error("Error: " + e.getMessage());
+        }
+        return id;
+    }
+
     // insert book info to the div1 database
     public static void addBook(Connection c)
     {
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
-        // @todo add params
+        // @todo add params: database name
         
         // (nro int, tekija string, nimi string, tyyppi string, luokka string, isbn string)
         String sqlBook = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
@@ -292,7 +313,7 @@ class TikoMain
             String isbn = inputPrompt("isbn", ".*", "");
             int bookId = getIdFromTable(c, "kirja", "isbn", isbn);
 
-            if (bookId >= 0) {
+            if (bookId >= 0) { // book found
                 // @todo book found just add selling copy
                 println("BookId found:" + bookId);
                 stmt.close();
@@ -304,11 +325,7 @@ class TikoMain
             String category = inputPrompt("Category", ".+", "e.g. romance or humor");
             boolean addCopy = inputPrompt("add selling copy(y/n)", "(y|n)", "").equals("y");
 
-            ResultSet rs = stmt.executeQuery("SELECT COUNT(nro) FROM kirja");
-            if ( rs.next() ) {
-                bookId = rs.getInt("count");
-                println("  DEBUG: book id: " + bookId);
-            }
+            bookId = getNextFreeId(c, "kirja");
             
             PreparedStatement addBook = c.prepareStatement(sqlBook);
             // @todo set empty strings to null or dont allow empty values
@@ -334,23 +351,20 @@ class TikoMain
     }
 
     // add selling copy to div1 database
+    // @todo how and when div1 adds books to keskus
     public static void addCopyDiv1(Connection c, int bookId)
     {
         // (nro int, paino float, kirja_nro int, ostohinta float)
         String sql = "INSERT INTO teos(nro, paino, kirja_nro, ostohinta)"
             + " VALUES(?, ?, ?, ?)";
         int copyId = 1;
-        float weight = promptFloat("weight", "weight in kilograms");
+        float weight = promptFloat("weight(kg)", "weight in kilograms");
         float buyin = promptFloat("buyin price", "");
         
         try {
             Statement stmt = c.createStatement();
             stmt.execute("SET search_path to div1");
-            ResultSet rs = stmt.executeQuery("SELECT COUNT(nro) FROM teos");
-            if ( rs.next() ) {
-                copyId = rs.getInt("count");
-                println("DEBUG: copy id: " + copyId);
-            }
+            copyId = getNextFreeId(c, "teos");
             
             PreparedStatement addCopy = c.prepareStatement(sql);
             addCopy.setInt(1, copyId);
@@ -376,30 +390,25 @@ class TikoMain
         // @todo query existing book, and divari
         // @todo fix sql keskus.teos
         // teos(nro int, paino float, kirja_nro int, div_nro int, hinta float)
-        String insertTeos = "INSET INTO teos VALUES (?, ?, ?, ?)";
+        int copyId = -1;
+        String insertTeos = "INSET INTO teos VALUES (?, ?, ?, ?, ?)";
         String shopName = inputPrompt("Shop name", ".+", "");
+        int shopId = getIdFromTable(c, "divari", "nimi", shopName);
         float weight = promptFloat("weight", "book weight in kilograms");
         float sellPrice = promptFloat("selling price", "");
-        int shopId = getIdFromTable(c, "divari", "nimi", shopName);
-        try {
-            String sql = "SELECT nro FROM divari WHERE nimi = ?";
-            PreparedStatement shop = c.prepareStatement(sql);
-            shop.setString(1, shopName);
-            ResultSet rs = shop.executeQuery();
-            if (rs.next()) {
-                shopId = rs.getInt("nro");
-            } else {
-                // @todo add new book info
-            }
-            shop.close();
         
+        try {
+            copyId = getNextFreeId(c, "teos");
+
             PreparedStatement addCopy = c.prepareStatement(insertTeos);
-            addCopy.setFloat(1, weight);
-            addCopy.setInt(2, bookId);
-            addCopy.setFloat(3, sellPrice);  // @todo sql: add hinta to sql teos table
-            addCopy.setInt(4, shopId); // @todo sql: add divari_nro to teos table
+            addCopy.setInt(1, copyId);
+            addCopy.setFloat(2, weight);
+            addCopy.setInt(3, bookId);
+            addCopy.setInt(4, shopId);  // @todo sql: add hinta to sql teos table
+            addCopy.setFloat(4, sellPrice); // @todo sql: add divari_nro to teos table
             int ret = addCopy.executeUpdate();
             addCopy.close();
+            c.commit();
             print("Added " + ret + " book to teos");
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
