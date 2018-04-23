@@ -64,6 +64,14 @@ class TikoMain
         }
     }
 
+    // prompts float allows user to use decimal ',' or '.'
+    public static float promptFloat(String fieldName, String help)
+    {
+        String s = inputPrompt(fieldName, "\\d+(,|\\.)?\\d*", help);
+        s = s.replace(',', '.');
+        return Float.parseFloat( s );
+    }
+
     /// Return false if program should exit
     /// True otherwise
     /// Executes the users commands
@@ -87,6 +95,11 @@ class TikoMain
             case "info":
                 info(user, params);
                 return true;
+            case "add_book":
+                addBook(conn);
+                return true;
+            case "test":
+                return true;
             case "exit":
             case "quit":
                 return false;
@@ -105,7 +118,7 @@ class TikoMain
     // @todo this needs the option for +358 numbers (or other country codes)
     static final String phone_regex = "\\d{6,10}";
 
-    /// Connect to the SQL server and verify
+     /// Connect to the SQL server and verify
     /// Keeps asking till user provides correct username/password
     /// @todo provide a method for escaping from the loop
     /// @todo return a User when connected
@@ -239,104 +252,149 @@ class TikoMain
         return false;
     }
 
-    // for each input string, ask user to input answer, return user answers
-    public static String[] queryUserInput(String[] query, Scanner s) 
-    {
-        String[] userInput = new String[input.length];
-        for (int i = 0; i < query.length; i++) {
-            print(query[i] + ": ");
-            userInput[i] = s.nextLine();
-        }
-        return userInput;
-    }
 
-    // unsafe sql update
-    public static int sqlUpdate(Connection c, String sql)
+    // return id from table row where col = value
+    // else return -1
+    public static int getIdFromTable(Connection c,String table, String col, String value)
     {
         try {
-            Statement stmt = c.createStatement();
-            return stmt.executeUpdate(sql);
-        } catch (SQLException e) {
+            String sql = "SELECT nro FROM "+table
+                + " WHERE "+col+" = ?";
+            PreparedStatement getId = c.prepareStatement(sql);
+            getId.setString(1, value);
+            ResultSet rs = getId.executeQuery();
+            if ( rs.next() ) {
+                return rs.getInt("nro");
+            }
+        } catch (Exception e) {
             error("Error: " + e.getMessage());
-            return 0;
         }
+        return -1;
     }
-    
+
     // insert book info to the div1 database
-    public static void addBook(Connection c, Scanner s)
+    public static void addBook(Connection c)
     {
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
+        
+        // (nro int, tekija string, nimi string, tyyppi string, luokka string, isbn string)
+        String sqlBook = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
+       
         try {
-            /* test hack */
             Statement stmt = c.createStatement();
             stmt.execute("SET search_path to div1");
-            print("changed to div1");
-            stmt.close();
-        } catch (SQLException e) {
-            error("Error: " + e.getMessage());
-        }
-<<<<<<< HEAD
-        
-        String[] query = new String[]{"author", "name", "type","category", "isbn"};
-        String[] usrInput = queryUserInput(query, s);
-=======
+            println("changed to div1");
 
->>>>>>> 5b78d4c14933b73bd4021b5a12c1064960455d30
-        String sql = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
-        
-        // @todo find out how to generate ids automaticly (in sql?)
-        int id = 1;
-        try {
-            PreparedStatement addBook = c.prepareStatement(sql);
-            addBook.setInt(1, id);
-            addBook.setString(2, usrInput[0]);
-            addBook.setString(3, usrInput[1]);
-            addBook.setString(4, usrInput[2]);
-            addBook.setString(5, usrInput[3]);
-            addBook.setString(6, usrInput[4]);
+            String isbn = inputPrompt("isbn", ".*", "");
+            int bookId = getIdFromTable(c, "kirja", "isbn", isbn);
+
+            if (bookId >= 0) {
+                // @todo book found just add selling copy
+                println("BookId found:" + bookId);
+                stmt.close();
+                return;
+            }
+            String author = inputPrompt("author", ".+", "Author of the book");
+            String name = inputPrompt("book name", ".+", "Name of the book");
+            String type = inputPrompt("type", ".+", "e.g. novel or comic book");
+            String category = inputPrompt("Category", ".+", "e.g. romance or humor");
+            boolean addCopy = inputPrompt("add selling copy(y/n)", "(y|n)", "").equals("y");
+
+            ResultSet rs = stmt.executeQuery("SELECT COUNT(nro) FROM kirja");
+            if ( rs.next() ) {
+                bookId = rs.getInt("count");
+                println("  DEBUG: book id: " + bookId);
+            }
+            
+            PreparedStatement addBook = c.prepareStatement(sqlBook);
+            // @todo set empty strings to null or dont allow empty values
+            addBook.setInt(1, bookId);
+            addBook.setString(2, author);
+            addBook.setString(3, name);
+            addBook.setString(4, type);
+            addBook.setString(5, category);
+            addBook.setString(6, isbn);
             int ret = addBook.executeUpdate();
-            print("Added " + ret + " book to kirja");
+            println("  Added " + ret + " book to kirja");
+
+            if (addCopy) {
+                // @todo chose right database
+                addCopyDiv1(c, bookId);
+            }
+            stmt.close();
+            addBook.close();
+            c.commit();
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
         }
     }
 
+    // add selling copy to div1 database
+    public static void addCopyDiv1(Connection c, int bookId)
+    {
+        // (nro int, paino float, kirja_nro int, ostohinta float)
+        String sql = "INSERT INTO teos(nro, paino, kirja_nro, ostohinta)"
+            + " VALUES(?, ?, ?, ?)";
+        int copyId = 1;
+        float weight = promptFloat("weight", "weight in kilograms");
+        float buyin = promptFloat("buyin price", "");
+        
+        try {
+            Statement stmt = c.createStatement();
+            stmt.execute("SET search_path to div1");
+            ResultSet rs = stmt.executeQuery("SELECT COUNT(nro) FROM teos");
+            if ( rs.next() ) {
+                copyId = rs.getInt("count");
+                println("DEBUG: copy id: " + copyId);
+            }
+            
+            PreparedStatement addCopy = c.prepareStatement(sql);
+            addCopy.setInt(1, copyId);
+            addCopy.setFloat(2, weight);
+            addCopy.setInt(3, bookId);
+            addCopy.setFloat(4, buyin);
+            int ret = addCopy.executeUpdate();
+            println("Added " + ret + " selling copy to teos");
 
-    public static void addCopy(Connection c)
+            stmt.close();
+            addCopy.close();
+            c.commit();
+        } catch (SQLException e) {
+            error("Error: " + e.getMessage());
+        }
+    }
+
+    public static void addCopyHub(Connection c, int bookId)
     {
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
 
         // @todo query existing book, and divari
+        // @todo fix sql keskus.teos
+        // teos(nro int, paino float, kirja_nro int, div_nro int, hinta float)
         String insertTeos = "INSET INTO teos VALUES (?, ?, ?, ?)";
-        String[] usrInput = queryUserInput(new String[]{"paino", "hinta" }, s);
-        float paino = 0.0f;
-        int kirjaNro = 0;
-        float hinta = 0.0f;
-        int divariId = 0;
-        String isbn = "";
+        String shopName = inputPrompt("Shop name", ".+", "");
+        float weight = promptFloat("weight", "book weight in kilograms");
+        float sellPrice = promptFloat("selling price", "");
+        int shopId = getIdFromTable(c, "divari", "nimi", shopName);
         try {
-            String sql = "SELECT nro FROM kirja WHERE isbn = ?";
-            PreparedStatement bookId = c.prepareStatement(sql);
-            bookId.setString(1, isbn);
-            ResultSet rs = bookId.executeQuery();
+            String sql = "SELECT nro FROM divari WHERE nimi = ?";
+            PreparedStatement shop = c.prepareStatement(sql);
+            shop.setString(1, shopName);
+            ResultSet rs = shop.executeQuery();
             if (rs.next()) {
-                kirjaNro = rs.getInt("nro");
+                shopId = rs.getInt("nro");
             } else {
                 // @todo add new book info
             }
-            bookId.close();
-        } catch (SQLException e) {
-            error("Error: " + e.getMessage());
-            return;
-        }
-        try {
+            shop.close();
+        
             PreparedStatement addCopy = c.prepareStatement(insertTeos);
-            addCopy.setFloat(1, paino);
-            addCopy.setInt(2, kirjaNro);
-            addCopy.setFloat(3, hinta);  // @todo sql: add hinta to sql teos table
-            addCopy.setInt(4, divariId); // @todo sql: add divari_nro to teos table
+            addCopy.setFloat(1, weight);
+            addCopy.setInt(2, bookId);
+            addCopy.setFloat(3, sellPrice);  // @todo sql: add hinta to sql teos table
+            addCopy.setInt(4, shopId); // @todo sql: add divari_nro to teos table
             int ret = addCopy.executeUpdate();
             addCopy.close();
             print("Added " + ret + " book to teos");
@@ -381,7 +439,7 @@ class TikoMain
                 line = scanner.nextLine();
                 if (!parseCmd(conn, user, line))
                 { break; }
-            }
+            } 
             conn.close();
         } catch (Exception e) {
              e.printStackTrace();
