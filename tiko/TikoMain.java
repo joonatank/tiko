@@ -279,6 +279,7 @@ class TikoMain
     {
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
+        // @todo add params
         
         // (nro int, tekija string, nimi string, tyyppi string, luokka string, isbn string)
         String sqlBook = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
