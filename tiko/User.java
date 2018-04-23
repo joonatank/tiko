@@ -29,7 +29,8 @@ class User
             "EMAIL= " + this.email + '\n' +
             "NAME = " + this.name + '\n' +
             "ADDRESS = " + this.address + '\n' +
-            "phonenumber = " + this.phonenumber + '\n'
+            "phonenumber = " + this.phonenumber + '\n' +
+            (this.admin ? "admin" : "user") + '\n'
             );
     }
 };
