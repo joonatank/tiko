@@ -8,24 +8,32 @@ create table kayttaja (email varchar(255), nimi varchar(255),
 create table kirja (nro int, tekija varchar(255), nimi varchar(255),
     tyyppi varchar(255), luokka varchar(255), isbn varchar(13),
     primary key (nro) );
-create table teos (nro int, paino float, kirja_nro int,
+create table teos (nro int, paino float, kirja_nro int, hinta float,
+    divari_nro int, tilaus_nro int,
     foreign key (kirja_nro) references kirja(nro),
+    foreign key (divari_nro) refrences divari(nro),
+    foreign key (tilaus_nro) refrences tilaus(nro),
     primary key (nro) );
 create table tilaus(nro int, tilaaja varchar(255), pvm date,
     tila varchar(16),
     foreign key (tilaaja) references kayttaja(email),
     primary key (nro) );
+-- onko tilaus_kirjat turha? tilauksen kirjat saa liittämällä
+-- kirja, teos, ja tilaus taulut, kun lisäsin teokselle tilaus_nro
 create table tilaus_kirjat (tilaus_nro int, kirja_nro int,
     foreign key (tilaus_nro) references tilaus(nro),
     foreign key (kirja_nro) references kirja(nro),
     primary key (tilaus_nro, kirja_nro) );
 create table divari (nro int, nimi varchar(255), osoite varchar(255),
+    web_sivu varchar(255),
     primary key (nro) );
-create table myy (teos_nro int, divari_nro int,
-    foreign key (teos_nro) references teos(nro),
-    foreign key (divari_nro) references divari(nro),
-    primary key (teos_nro, divari_nro) );
 
+create table postikulut (paino float, hinta float,
+    primary key (paino) );
+create table tilaus_postikulut (tilaus_nro int, posti_paino,
+    foreign key (tilaus_nro) references tilaus(nro),
+    foreign key (posti_paino) references postikulut(paino),
+    primary key (tilaus_nro, posti_paino) );
 
 -- Luo Divari 1 schema
 create schema div1;
