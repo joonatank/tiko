@@ -35,9 +35,19 @@ public class BookInfo
             this.shopAddress = shopAddress;
     }
 
+    public int id() {return this.id; }
+    public String author() { return this.author; }
+    public String name()  { return this.name; }
+    public String type()  { return this.type; }
+    public String category () {return this.category; }
+
     public String toString() {
         return (" " + id + ": " +name+"; " +author+": " +type+ "; " +category+ ": isbn: " +isbn+ "\n"
             + "\tprice: " +price+ "e; Shop: " + shopName );
+    }
+    
+    public boolean equals(BookInfo book) {
+        return this.id == book.id();
     }
 };
 

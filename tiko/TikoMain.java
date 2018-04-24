@@ -26,6 +26,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 // Data structure
 import java.util.ArrayList;
+import java.util.Arrays; // testing: printing arrays
 
 import tiko.User;
 import tiko.BookInfo;
@@ -456,13 +457,67 @@ class TikoMain
 
     public static void searchBooks(Connection c, String[] params) 
     {
-        String instruction = "Crtiteria: use #title #author #category or #type to specify where to search";
+        String instruction = "Crtiteria: use #title #author #category or"
+            + " #type to specify where to search\n";
         String input = inputPrompt(instruction, ".*", "");
-        // @todo parse search input, select books that fit search criteria
         ArrayList<BookInfo> books = listAvaibleBooks(c);
-        for (BookInfo book : books) {
-            println(book.toString());
-        }
+        if (input.length() == 0) {
+            for (BookInfo book : books) {
+                println(book.toString());
+            }
+        } 
+        else {
+            String[] inputSplit = input.split("#");
+            for (String str : inputSplit) {
+                String[] split = str.split(" ", 2);
+                
+                if (split.length < 2) {
+                    continue;
+                }
+                split[1] = split[1].trim();
+                ArrayList<BookInfo> in = new ArrayList<>(books);
+                switch (split[0]) {
+                    case "title":
+                        for (BookInfo book : in) {
+                            if ( !book.name().toLowerCase().contains(split[1].toLowerCase())) {
+                                books.remove(book);
+                            }
+                        }
+                        break;
+                    case "author":
+                        for (BookInfo book : in) {
+                            if ( !book.author().toLowerCase().contains(split[1].toLowerCase())) {
+                                books.remove(book);
+                            }
+                        } 
+                        break;
+                    case "category":
+                        for (BookInfo book : in) {
+                            if ( !book.category().toLowerCase().contains(split[1].toLowerCase())) {
+                                books.remove(book);
+                            }
+                        } 
+                        break;
+                    case "type":
+                        for (BookInfo book : in) {
+                            if ( !book.type().toLowerCase().contains(split[1].toLowerCase()) ) {
+                                books.remove(book);
+                            }
+                        } 
+                        break;
+                    default:
+                        break;
+                } // end switch
+            } // end for each
+
+            if (books.size() == 0) {
+                println("0 books found.");
+            } else {
+                for (BookInfo book : books) {
+                    println(book.toString());
+                }
+            }
+        } // end else
     }
 
     // query all avaible books from keskus.
@@ -527,7 +582,6 @@ class TikoMain
                 String type = inputPrompt("type", ".+", "e.g. novel or comic book");
                 String category = inputPrompt("Category", ".+", "e.g. romance or humor");
                 
-
                 bookId = getNextFreeId(c, "kirja");
                 
                 PreparedStatement addBook = c.prepareStatement(sqlBook);
@@ -541,17 +595,22 @@ class TikoMain
                 int ret = addBook.executeUpdate();
                 println("  Added " + ret + " book to kirja");
                 
+                
                 // trying to add book info to keskus
                 try {
                     stmt.execute("SET search_path to keskus");
-                    addBook.setInt(1, getNextFreeId(c, "kirja") );
-                    addBook.executeUpdate();
+                    int bookKeskus = getIdFromTable(c, "kirja", "isbn", isbn);
+                    if (bookKeskus < 0 ) {
+                        addBook.setInt(1, getNextFreeId(c, "kirja") );
+                        addBook.executeUpdate();
+                    }
                     stmt.execute("SET search_path to div1");
                 } catch (Exception e) {
                     stmt.execute("SET search_path to div1");
                 }
                 addBook.close();
             }
+            c.commit();
 
             boolean addCopy = inputPrompt("add book to stock (y/n)", "(y|n)", "").equals("y");
             if (addCopy) {
@@ -651,7 +710,7 @@ class TikoMain
                 println("No such shop as: " + shopName);
                 return false;
             }
-            // @todo try getting weight from database
+            // @todo try getting weight from teos
             float weight = promptFloat("weight", "book weight in kilograms");
             float sellPrice = promptFloat("selling price", "");
 
