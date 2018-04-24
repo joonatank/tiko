@@ -1,3 +1,5 @@
+-- Mahdolliset arvot tilaus.tila: avoin, lahetetty
+
 -- Luo Keskusdivarin schema
 create schema keskus;
 set search_path to keskus;
@@ -5,6 +7,7 @@ create table kayttaja (email varchar(255), nimi varchar(255),
     salasana varchar(255), osoite varchar(255), puh_nro varchar(12),
     kayttooikeus varchar(16),
     primary key (email) );
+-- @todo add year
 create table kirja (nro int, tekija varchar(255), nimi varchar(255),
     tyyppi varchar(255), luokka varchar(255), isbn varchar(13),
     primary key (nro) );

@@ -7,7 +7,8 @@
 package tiko;
 
 public class BookInfo
-{
+{   
+    // @todo remove redundant attributes
     private String author;
     private String name;
     private String type;
@@ -42,7 +43,7 @@ public class BookInfo
     public String category () {return this.category; }
 
     public String toString() {
-        return (" " + id + ": " +name+"; " +author+": " +type+ "; " +category+ ": isbn: " +isbn+ "\n"
+        return (" " + id + ": " +name+"; " +author+"; " +type+ "; " +category+ "; isbn: " +isbn+ "\n"
             + "\tprice: " +price+ "e; Shop: " + shopName );
     }
     
