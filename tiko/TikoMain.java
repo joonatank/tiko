@@ -9,6 +9,7 @@ package tiko;
 
 // User input
 import java.util.Scanner;
+import java.awt.print.Book;
 // SQL
 import java.sql.Connection;
 import java.sql.DriverManager;
@@ -23,8 +24,11 @@ import java.time.ZoneId;
 // Regex
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+// Data structure
+import java.util.ArrayList;
 
 import tiko.User;
+import tiko.BookInfo;
 
 // @todo add SQL connection
 class TikoMain
@@ -139,7 +143,14 @@ class TikoMain
             case "add_book":
                 addBook(conn);
                 return true;
-            case "test":
+            case "sell_book":
+                sellBook(conn, null);
+                return true;
+            case "list":
+                listAvaibleBooks(conn);
+                return true;
+            case "search":
+                searchBooks(conn, params);
                 return true;
             case "exit":
             case "quit":
@@ -293,7 +304,9 @@ class TikoMain
             getId.setString(1, value);
             ResultSet rs = getId.executeQuery();
             if ( rs.next() ) {
-                return rs.getInt("nro");
+                int id = rs.getInt("nro");
+                getId.close();
+                return id;
             }
         } catch (Exception e) {
             error("Error: " + e.getMessage());
@@ -336,6 +349,27 @@ class TikoMain
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
         }
+    }
+
+    // get next free id from table, -1 if some erros occuer
+    // set to right search path prior calling this method
+    //
+    // ids start from 0, and increase by increments of 1
+    public static int getNextFreeId(Connection c, String table)
+    {
+        int id = -1;
+        try {
+            String sql = "SELECT COUNT( nro ) FROM " + table;
+            Statement stmt = c.createStatement();
+            ResultSet rs = stmt.executeQuery(sql);
+            if (rs.next())
+                id = rs.getInt("count");
+                stmt.close();
+                return id;
+        } catch (Exception e) {
+            error("Error: " + e.getMessage());
+        }
+        return id;
     }
 
     /** Iffy design decission to have the cart only for user that are logged in
@@ -474,13 +508,56 @@ class TikoMain
         return false;
     }
 
-    // insert book info to the div1 database
+    public static void searchBooks(Connection c, String[] params)
+    {
+        String instruction = "Crtiteria: use #title #author #category or #type to specify where to search";
+        String input = inputPrompt(instruction, ".*", "");
+        // @todo parse search input, select books that fit search criteria
+        ArrayList<BookInfo> books = listAvaibleBooks(c);
+        for (BookInfo book : books) {
+            println(book.toString());
+        }
+    }
+
+    // query all avaible books from keskus.
+    // return books in ArrayList
+    public static ArrayList<BookInfo> listAvaibleBooks(Connection c)
+    {
+        ArrayList<BookInfo> books = new ArrayList<BookInfo>();
+        try {
+            // @todo ääkköset katoaa?
+            Statement stmt = c.createStatement();
+            stmt.execute("SET SEARCH_PATH TO keskus");
+            ResultSet rs = stmt.executeQuery("SELECT * FROM myynnissa");
+            while(rs.next()) {
+                int id = rs.getInt("nro");
+                String name = rs.getString("nimi");
+                String author = rs.getString("tekija");
+                String type = rs.getString("tyyppi");
+                String category = rs.getString("luokka");
+                String isbn = rs.getString("isbn");
+                float weight = rs.getFloat("paino");
+                float price = rs.getFloat("hinta");
+                String shopName = rs.getString("divari_nimi");
+                String shopAddress = rs.getString("osoite");
+
+                BookInfo b = new BookInfo(id, author, name, type, category, isbn,
+                    weight, price, shopName, shopAddress);
+                books.add(b);
+            }
+        } catch (Exception e) {
+            error("Error: " + e.getMessage());
+        }
+        return books;
+    }
+
+    // insert book info to the div1 and keskus
+    //
     public static void addBook(Connection c)
     {
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
-        // @todo add params
-
+        // @todo add params: database name
         // (nro int, tekija string, nimi string, tyyppi string, luokka string, isbn string)
         String sqlBook = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
 
@@ -492,41 +569,51 @@ class TikoMain
             String isbn = inputPrompt("isbn", ".*", "");
             int bookId = getIdFromTable(c, "kirja", "isbn", isbn);
 
-            if (bookId >= 0) {
+            if (bookId >= 0) { // book found
                 // @todo book found just add selling copy
                 println("BookId found:" + bookId);
-                stmt.close();
-                return;
             }
-            String author = inputPrompt("author", ".+", "Author of the book");
-            String name = inputPrompt("book name", ".+", "Name of the book");
-            String type = inputPrompt("type", ".+", "e.g. novel or comic book");
-            String category = inputPrompt("Category", ".+", "e.g. romance or humor");
-            boolean addCopy = inputPrompt("add selling copy(y/n)", "(y|n)", "").equals("y");
+            // add new book info to the database
+            else {
+                String author = inputPrompt("author", ".+", "Author of the book");
+                String name = inputPrompt("book name", ".+", "Name of the book");
+                String type = inputPrompt("type", ".+", "e.g. novel or comic book");
+                String category = inputPrompt("Category", ".+", "e.g. romance or humor");
 
-            ResultSet rs = stmt.executeQuery("SELECT COUNT(nro) FROM kirja");
-            if ( rs.next() ) {
-                bookId = rs.getInt("count");
-                println("  DEBUG: book id: " + bookId);
+
+                bookId = getNextFreeId(c, "kirja");
+
+                PreparedStatement addBook = c.prepareStatement(sqlBook);
+                // @todo set empty strings to null or dont allow empty values
+                addBook.setInt(1, bookId);
+                addBook.setString(2, author);
+                addBook.setString(3, name);
+                addBook.setString(4, type);
+                addBook.setString(5, category);
+                addBook.setString(6, isbn);
+                int ret = addBook.executeUpdate();
+                println("  Added " + ret + " book to kirja");
+
+                // trying to add book info to keskus
+                try {
+                    stmt.execute("SET search_path to keskus");
+                    addBook.setInt(1, getNextFreeId(c, "kirja") );
+                    addBook.executeUpdate();
+                    stmt.execute("SET search_path to div1");
+                } catch (Exception e) {
+                    stmt.execute("SET search_path to div1");
+                }
+                addBook.close();
             }
 
-            PreparedStatement addBook = c.prepareStatement(sqlBook);
-            // @todo set empty strings to null or dont allow empty values
-            addBook.setInt(1, bookId);
-            addBook.setString(2, author);
-            addBook.setString(3, name);
-            addBook.setString(4, type);
-            addBook.setString(5, category);
-            addBook.setString(6, isbn);
-            int ret = addBook.executeUpdate();
-            println("  Added " + ret + " book to kirja");
-
+            boolean addCopy = inputPrompt("add book to stock (y/n)", "(y|n)", "").equals("y");
             if (addCopy) {
-                // @todo chose right database
                 addCopyDiv1(c, bookId);
+                if ( inputPrompt("sell in hub (y/n)", "(y|n)", "").equals("y") ) {
+                    sellBook(c, isbn);
+                }
             }
             stmt.close();
-            addBook.close();
             c.commit();
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
@@ -534,23 +621,21 @@ class TikoMain
     }
 
     // add selling copy to div1 database
+    // @todo how and when div1 adds books to keskus
     public static void addCopyDiv1(Connection c, int bookId)
     {
         // (nro int, paino float, kirja_nro int, ostohinta float)
         String sql = "INSERT INTO teos(nro, paino, kirja_nro, ostohinta)"
             + " VALUES(?, ?, ?, ?)";
         int copyId = 1;
-        float weight = promptFloat("weight", "weight in kilograms");
+        // TODO try getting weight from teos
+        float weight = promptFloat("weight(kg)", "weight in kilograms");
         float buyin = promptFloat("buyin price", "");
 
         try {
             Statement stmt = c.createStatement();
             stmt.execute("SET search_path to div1");
-            ResultSet rs = stmt.executeQuery("SELECT COUNT(nro) FROM teos");
-            if ( rs.next() ) {
-                copyId = rs.getInt("count");
-                println("DEBUG: copy id: " + copyId);
-            }
+            copyId = getNextFreeId(c, "teos");
 
             PreparedStatement addCopy = c.prepareStatement(sql);
             addCopy.setInt(1, copyId);
@@ -568,41 +653,77 @@ class TikoMain
         }
     }
 
-    public static void addCopyHub(Connection c, int bookId)
+    // gets bookId from keskus.kirja and adds selling copy
+    // to keskus.
+    public static void sellBook(Connection c, String isbn)
+    {
+        // @todo check permission
+        try {
+            Statement stmt = c.createStatement();
+            stmt.execute("SET SEARCH_PATH TO keskus");
+            // @todo better way getting bookId, books can have same name
+            if (isbn == null) {
+                isbn = inputPrompt("book isbn", ".+", "");
+            }
+
+            int bookId = getIdFromTable(c, "kirja", "isbn", isbn);
+            if ( bookId < 0 ) {
+                println( isbn + " is not in database" );
+                return;
+            }
+
+            boolean ret = addCopyHub(c, bookId);
+            if (ret) {
+                println("Added selling copy to keskus");
+            }
+        } catch (SQLException e) {
+            error("Error: " + e.getMessage());
+        }
+    }
+
+    // adds selling copy to the keskus.
+    // book info needs to be in keskus.kirja
+    public static boolean addCopyHub(Connection c, int bookId)
     {
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
 
         // @todo query existing book, and divari
-        // @todo fix sql keskus.teos
-        // teos(nro int, paino float, kirja_nro int, div_nro int, hinta float)
-        String insertTeos = "INSET INTO teos VALUES (?, ?, ?, ?)";
-        String shopName = inputPrompt("Shop name", ".+", "");
-        float weight = promptFloat("weight", "book weight in kilograms");
-        float sellPrice = promptFloat("selling price", "");
-        int shopId = getIdFromTable(c, "divari", "nimi", shopName);
+        // teos(nro int, paino float, kirja_nro int, div_nro int,
+        //     hinta float, tilaus_nro int)
+        int copyId = -1;
+
         try {
-            String sql = "SELECT nro FROM divari WHERE nimi = ?";
-            PreparedStatement shop = c.prepareStatement(sql);
-            shop.setString(1, shopName);
-            ResultSet rs = shop.executeQuery();
-            if (rs.next()) {
-                shopId = rs.getInt("nro");
-            } else {
-                // @todo add new book info
+            Statement stmt = c.createStatement();
+            stmt.execute("SET SEARCH_PATH TO keskus");
+            String insertTeos = "INSERT INTO teos VALUES (?, ?, ?, ?, ?, ?)";
+            String shopName = inputPrompt("Shop name", ".+", "");
+            // @todo try getting shop id from admin rights?
+            int shopId = getIdFromTable(c, "divari", "nimi", shopName);
+            if ( shopId < 0 ) {
+                println("No such shop as: " + shopName);
+                return false;
             }
-            shop.close();
+            // @todo try getting weight from database
+            float weight = promptFloat("weight", "book weight in kilograms");
+            float sellPrice = promptFloat("selling price", "");
+
+            copyId = getNextFreeId(c, "teos");
 
             PreparedStatement addCopy = c.prepareStatement(insertTeos);
-            addCopy.setFloat(1, weight);
-            addCopy.setInt(2, bookId);
-            addCopy.setFloat(3, sellPrice);  // @todo sql: add hinta to sql teos table
-            addCopy.setInt(4, shopId); // @todo sql: add divari_nro to teos table
+            addCopy.setInt(1, copyId);
+            addCopy.setFloat(2, weight);
+            addCopy.setInt(3, bookId);
+            addCopy.setFloat(4, sellPrice);
+            addCopy.setInt(5, shopId);
+            addCopy.setNull(6, java.sql.Types.NULL );
             int ret = addCopy.executeUpdate();
             addCopy.close();
-            print("Added " + ret + " book to teos");
+            c.commit();
+            return true;
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
+            return false;
         }
     }
 
