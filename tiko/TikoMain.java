@@ -128,7 +128,10 @@ class TikoMain
                 return true;
             case "add_to_cart":
                 // @todo fix the book id
-                addToCart(conn, user, -1);
+                addToCart(conn, user, params);
+                return true;
+            case "cart":
+                showCart(conn, user);
                 return true;
             case "order":
                 order(conn, user);
@@ -298,45 +301,97 @@ class TikoMain
         return -1;
     }
 
-    /// @return true if added succesfully, false otherwise
-    /// Iffy design decission to have the cart only for user that are logged in
-    /// in a real application we would use a temporary cart/user for this
-    ///
-    /// We assume that the bookId is valid and existing
-    /// so we can just push it directly into the SQL
-    /// @todo
-    /// need to add orderId into User if it's negative there is no order yet
-    /// if there is no order yet create a new one (SQL command)
-    /// if it's positive -> it exists -> update that order in the SQL
-    public static boolean addToCart(Connection conn, User user, int bookId)
+    /** Print the users cart if one exists
+     */
+    public static void showCart(Connection conn, User user)
+    {
+        if (!loggedIn(user))
+        { return; }
+
+        Statement stmt;
+        ResultSet rs;
+        try {
+            stmt = conn.createStatement();
+            stmt.execute("SET search_path to keskus");
+            // select kirja_nro from
+            // (select * from tilaus where tilaaja='j@foo.bar') as t
+            // inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro;
+            String query =
+                "select kirja_nro from "
+              + "(select * from tilaus where tilaaja='" + user.email + "') as t "
+              + " inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro; "
+              + ";";
+            stmt.executeQuery(query);
+            rs = stmt.executeQuery(query);
+            if(!rs.isBeforeFirst()) {
+                println("No open orders.");
+            }
+            while( rs.next() )
+            {
+                // @todo print details about the book
+                println("Book: " + rs.getInt("kirja_nro") + " in order.");
+            }
+            rs.close();
+            stmt.close();
+        } catch (SQLException e) {
+            error("Error: " + e.getMessage());
+        }
+    }
+
+    /** Iffy design decission to have the cart only for user that are logged in
+     *  in a real application we would use a temporary cart/user for this
+     *
+     *  Orders are saved in the Database, so retrieves and creates one there
+     *
+     * @param conn : database connection
+     * @param user : logged in user
+     * @param params : commandline params (bookId as params[0])
+     * @return true if added succesfully, false otherwise
+     */
+    public static boolean addToCart(Connection conn, User user, String [] params)
     {
         if(!loggedIn(user))
         { return false; }
 
-        // @todo check that the book id is valid
-        // i.e. it's not < and it's in the Database
-        // need one more query here for that
+        if(params.length <= 0)
+        {
+            error("Please give a book id as parameter");
+            return false;
+        }
 
-        // @todo what is the logic with Statements
-        // do we close them only after finishing (finally block)
-        // while reusing them here?
-        // or do we need to close them before reuse
+        int bookId = Integer.parseInt(params[0]);
+
+        log("TRACE", "addToCart with " + bookId + " book.");
+
+        Statement stmt;
+        PreparedStatement pstm;
+        ResultSet rs;
         try {
-            // @todo need to add, if not existing
-            // so we need to add an extra field to the user or smth?
-            // yea, empty field that we start filling the first time user calls add to cart
-            // tilaus (tilaus_id, kayttajaref, pvm, tila)
+            // Check that the book is in the DB
+            stmt = conn.createStatement();
+            stmt.execute("SET search_path to keskus");
+            String query = "select nro from kirja where " +
+                " nro=" + bookId +
+                ";";
+            stmt.executeQuery(query);
+            rs = stmt.executeQuery(query);
+            if ( !rs.next() )
+            {
+                error("Book with id " + bookId + " not found.");
+                return false;
+            }
+            rs.close();
+            stmt.close();
 
             // Find an already existing order where to add
-            Statement stmt = conn.createStatement();
-            stmt.execute("SET search_path to keskus");
-            String query = "select * from tilaus where " +
+            stmt = conn.createStatement();
+            query = "select * from tilaus where " +
                 "tilaaja='" + user.email +"'" + " and " +
                 "tila='avoin'" +
                 ";";
             stmt.executeQuery(query);
             int orderId = -1;
-            ResultSet rs = stmt.executeQuery(query);
+            rs = stmt.executeQuery(query);
             // found an order
             if ( rs.next() ) {
                 orderId = rs.getInt("nro");
@@ -344,7 +399,7 @@ class TikoMain
                 rs.close();
                 stmt.close();
             }
-            // else take a count of the array and use that as new id
+            // else take a count of the array and use that as a new order id
             // create a new order with the id
             else {
                 stmt.execute("SET search_path to keskus");
@@ -358,9 +413,9 @@ class TikoMain
                     error("Something really fucked up with count.");
                 }
 
-                println("Cool now we need to add a new order: " + orderId);
+                log("TRACE", "Cool now we need to add a new order: " + orderId);
 
-                PreparedStatement pstm = conn.prepareStatement(
+                pstm = conn.prepareStatement(
                         "insert into tilaus"
                       + " (nro, tilaaja, pvm, tila)"
                       + " values (?, ?, ?, ?)");
@@ -371,8 +426,8 @@ class TikoMain
 
                 pstm.executeUpdate();
 
-                pstm.close();
                 conn.commit();
+                pstm.close();
             }
 
             if(orderId < 0)
@@ -381,11 +436,10 @@ class TikoMain
                 return false;
             }
 
-            println("Cool now we need to update order: " + orderId);
+            log("TRACE", "Cool now we need to update order: " + orderId);
 
-            // do the update
-            // @todo test, seems to work but we need the SQL table kirjat and valid id
-            PreparedStatement pstm = conn.prepareStatement(
+            // Add to cart
+            pstm = conn.prepareStatement(
                     "insert into tilaus_kirjat"
                   + " (tilaus_nro, kirja_nro)"
                   + " values (?, ?)");
@@ -394,8 +448,8 @@ class TikoMain
 
             pstm.executeUpdate();
 
-            pstm.close();
             conn.commit();
+            pstm.close();
 
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
@@ -426,10 +480,10 @@ class TikoMain
         // @todo check user-role and permission
         // @todo change database to the corresponding schema
         // @todo add params
-        
+
         // (nro int, tekija string, nimi string, tyyppi string, luokka string, isbn string)
         String sqlBook = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
-       
+
         try {
             Statement stmt = c.createStatement();
             stmt.execute("SET search_path to div1");
@@ -455,7 +509,7 @@ class TikoMain
                 bookId = rs.getInt("count");
                 println("  DEBUG: book id: " + bookId);
             }
-            
+
             PreparedStatement addBook = c.prepareStatement(sqlBook);
             // @todo set empty strings to null or dont allow empty values
             addBook.setInt(1, bookId);
@@ -488,7 +542,7 @@ class TikoMain
         int copyId = 1;
         float weight = promptFloat("weight", "weight in kilograms");
         float buyin = promptFloat("buyin price", "");
-        
+
         try {
             Statement stmt = c.createStatement();
             stmt.execute("SET search_path to div1");
@@ -497,7 +551,7 @@ class TikoMain
                 copyId = rs.getInt("count");
                 println("DEBUG: copy id: " + copyId);
             }
-            
+
             PreparedStatement addCopy = c.prepareStatement(sql);
             addCopy.setInt(1, copyId);
             addCopy.setFloat(2, weight);
@@ -538,7 +592,7 @@ class TikoMain
                 // @todo add new book info
             }
             shop.close();
-        
+
             PreparedStatement addCopy = c.prepareStatement(insertTeos);
             addCopy.setFloat(1, weight);
             addCopy.setInt(2, bookId);
@@ -588,7 +642,7 @@ class TikoMain
                 line = scanner.nextLine();
                 if (!parseCmd(conn, user, line))
                 { break; }
-            } 
+            }
             conn.close();
         } catch (Exception e) {
              e.printStackTrace();
