@@ -2,11 +2,14 @@
 SET SEARCH_PATH TO keskus;
 
 CREATE VIEW myynnissa AS
-SELECT *
+SELECT teos.nro AS nro, kirja.nro AS kirja_nro, kirja.tekija, kirja.nimi,
+    kirja.tyyppi, kirja.luokka, kirja.isbn, paino, hinta, 
+    divari.nimi AS divari_nimi, divari.osoite
 FROM kirja, teos, divari
 WHERE kirja.nro = teos.kirja_nro 
     AND teos.divari_nro = divari.nro
-    AND teos.tilaus_nro = NULL;
+    AND teos.tilaus_nro IS NULL
+ORDER BY nimi, tekija, tyyppi, luokka;
 
 -- tilauksien kirjat
 CREATE VIEW tilaus_kirjat AS
