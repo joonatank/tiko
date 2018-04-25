@@ -36,14 +36,15 @@ public class BookInfo
             this.shopAddress = shopAddress;
     }
 
-    public int id() {return this.id; }
+    public int id() { return this.id; }
+    public float price() { return this.price; }
     public String author() { return this.author; }
     public String name()  { return this.name; }
     public String type()  { return this.type; }
     public String category () {return this.category; }
 
     public String toString() {
-        return (" " + id + ": " +name+"; " +author+"; " +type+ "; " +category+ "; isbn: " +isbn+ "\n"
+        return (" id:" + id + ": \t" +name+"; " +author+"; " +type+ "; " +category+ "; isbn: " +isbn+ "\n"
             + "\tprice: " +price+ "e; Shop: " + shopName );
     }
     

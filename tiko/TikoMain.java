@@ -43,9 +43,10 @@ class TikoMain
         + "\n" + "show_cart - show the shoppin cart"
         + "\n" + "order - order the books in the shopping cart"
         + "\n" + "show_orders - show previous orders"
-        + "\n" + "add_book"
-        + "\n" + "sell_book"
-        + "\n" + "search"
+        + "\n" + "add_book - admin: add book data to database / add books to stock"
+        + "\n" + "sell_book - add books for sale"
+        + "\n" + "search - search books"
+        + "\n" + "list - list avaible books sorted by category, show category total and mean price"
         + "\n" + "exit or quit - exit the program"
         + "\n" + "help - print this help"
         + "\n"
@@ -174,13 +175,16 @@ class TikoMain
                 showOrders(conn, user);
                 return true;
             case "add_book":
-                addBook(conn);
+                addBook(conn, user);
                 return true;
             case "sell_book":
-                sellBook(conn, null);
+                sellBook(conn, null, user);
                 return true;
             case "search":
                 searchBooks(conn, params);
+                return true;
+            case "list":
+                printCategoryInfo(conn);
                 return true;
             case "exit":
             case "quit":
@@ -629,15 +633,16 @@ class TikoMain
     }
 
     // prints books that fulfil search criteria
+    // @todo use params if available
     public static void searchBooks(Connection c, String[] params)
     {
         String instruction = "Crtiteria: use #title #author #category or"
             + " #type to specify where to search\n";
         String input = inputPrompt(instruction, ".*", "");
-        ArrayList<BookInfo> books = listAvaibleBooks(c);
+        ArrayList<BookInfo> books = listAvaibleBooks(c, "ORDER BY nimi, tekija, luokka");
         if (input.length() == 0) {
             for (BookInfo book : books) {
-                println(book.toString());
+                println(book.toString() + "\n");
             }
         }
         else {
@@ -688,22 +693,50 @@ class TikoMain
                 println("0 books found.");
             } else {
                 for (BookInfo book : books) {
-                    println(book.toString());
+                    println(book.toString() + "\n");
                 }
             }
         } // end else
     }
 
+    public static void printCategoryInfo(Connection c)
+    {
+        ArrayList<BookInfo> books = listAvaibleBooks(c, "ORDER BY luokka, nimi, tekija");
+        if (books.size() == 0){
+            return;
+        }
+        String category = books.get(0).category();
+        int count = 0;
+        float priceSum = 0;
+        for (BookInfo book : books) {
+            if ( book.category().equals(category) ) {
+                count++;
+                priceSum += book.price();
+            } else {
+                println(category.toUpperCase() + ": total sale price: " 
+                    + priceSum  + "e mean price: " + priceSum / count + "e\n");
+                category = book.category();
+                count = 1;
+                priceSum = book.price();
+            }
+            println( book.toString() + "\n" );
+        }
+        println(category.toUpperCase() + ": total sale price: " 
+            + priceSum  + "e mean price: " + priceSum / count + "e\n");
+    }
+
     // query all avaible books from keskus.
     // return books in ArrayList
-    public static ArrayList<BookInfo> listAvaibleBooks(Connection c)
+    // param: concatSql is added to "SELECT * FROM myynnissa "-query,
+    //        use empty string if WHERE / ORDER BY is not needed.
+    public static ArrayList<BookInfo> listAvaibleBooks(Connection c, String concatSql)
     {
         ArrayList<BookInfo> books = new ArrayList<BookInfo>();
         try {
             // @todo ääkköset katoaa?
             Statement stmt = c.createStatement();
             stmt.execute("SET SEARCH_PATH TO keskus");
-            ResultSet rs = stmt.executeQuery("SELECT * FROM myynnissa");
+            ResultSet rs = stmt.executeQuery("SELECT * FROM myynnissa " + concatSql);
             while(rs.next()) {
                 int id = rs.getInt("nro");
                 String name = rs.getString("nimi");
@@ -728,11 +761,11 @@ class TikoMain
 
     // insert book info to the div1 and keskus
     //
-    public static void addBook(Connection c)
+    public static void addBook(Connection c, User user)
     {
-        // @todo check user-role and permission
-        // @todo change database to the corresponding schema
-        // @todo add params: database name
+        if ( !user.admin ) {
+            println("Only admins can add books");
+        }
         // (nro int, tekija string, nimi string, tyyppi string, luokka string, isbn string)
         String sqlBook = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
 
@@ -788,7 +821,7 @@ class TikoMain
             if (addCopy) {
                 addCopyDiv1(c, bookId);
                 if ( inputPrompt("sell in hub (y/n)", "(y|n)", "").equals("y") ) {
-                    sellBook(c, isbn);
+                    sellBook(c, isbn, user);
                 }
             }
             stmt.close();
@@ -833,9 +866,11 @@ class TikoMain
 
     // gets bookId from keskus.kirja and adds selling copy
     // to keskus.
-    public static void sellBook(Connection c, String isbn)
+    public static void sellBook(Connection c, String isbn, User user)
     {
-        // @todo check permission
+        if ( !user.admin ) {
+            println("Only admins can sell books");
+        }
         try {
             Statement stmt = c.createStatement();
             stmt.execute("SET SEARCH_PATH TO keskus");
