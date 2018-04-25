@@ -763,8 +763,9 @@ class TikoMain
     //
     public static void addBook(Connection c, User user)
     {
-        if ( !user.admin ) {
+        if ( user.admin == false ) {
             println("Only admins can add books");
+            return;
         }
         // (nro int, tekija string, nimi string, tyyppi string, luokka string, isbn string)
         String sqlBook = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
@@ -870,6 +871,7 @@ class TikoMain
     {
         if ( !user.admin ) {
             println("Only admins can sell books");
+            return;
         }
         try {
             Statement stmt = c.createStatement();
