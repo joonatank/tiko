@@ -601,8 +601,6 @@ class TikoMain
 
                 rs.close();
 
-                // @todo Calculate the postage
-
                 // print info before confirmation
                 // need to retrieve from SQL using the order id
                 //  - print address
@@ -610,8 +608,6 @@ class TikoMain
                 //  - postage
                 //  - final price
                 stmt.close();
-                // @todo query should be to books not teos (intermediat result)
-                //query = "select * from teos where tilaus_nro=" + orderId
                 query = "select tekija,nimi,paino,vuosi,isbn,hinta,divari_nro"
                       + " from kirja inner join"
                       + " (select * from teos where tilaus_nro=" + orderId + ") as t"
