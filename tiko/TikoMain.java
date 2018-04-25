@@ -19,6 +19,7 @@ import java.sql.SQLException;
 import java.sql.PreparedStatement;
 import java.sql.Savepoint;
 // time
+import java.util.Date;
 import java.time.LocalDate;
 import java.time.ZoneId;
 // Regex
@@ -31,7 +32,6 @@ import java.util.Arrays; // testing: printing arrays
 import tiko.User;
 import tiko.BookInfo;
 
-// @todo add SQL connection
 class TikoMain
 {
     public static final String HELP_TXT =
@@ -142,13 +142,13 @@ class TikoMain
      */
     public static boolean parseCmd(Connection conn, User user, String command)
     {
-        // @todo this should be ArrayList with each parameter separated
+        // parse cmd into arguments (split from spaces)
+        // command into it's own string and params into an array list
         String[] arr = command.split(" ", 0);
         String cmd = arr[0];
         String[] params = new String[arr.length-1];
         System.arraycopy(arr, 1, params, 0, arr.length-1);
-        // @todo parse cmd into arguments (split from spaces)
-        // command into it's own string and params into an array list
+
         switch(cmd)
         {
             case "login":
@@ -161,7 +161,6 @@ class TikoMain
                 info(user);
                 return true;
             case "add_to_cart":
-                // @todo fix the book id
                 addToCart(conn, user, params);
                 return true;
             case "cart":
@@ -203,6 +202,7 @@ class TikoMain
      */
     public static void help(Connection conn, User user)
     {
+        println("");
         println(HELP_TXT);
     }
 
@@ -361,24 +361,44 @@ class TikoMain
         try {
             stmt = conn.createStatement();
             stmt.execute("SET search_path to keskus");
-            // select kirja_nro from
-            // (select * from tilaus where tilaaja='j@foo.bar') as t
-            // inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro;
+            // select * from
+            // (select * from tilaus where tilaaja='j@foo.bar' and tila='avoin') as t
+            // inner join teos on teos.tilaus_nro=t.nro;
             String query =
-                "select kirja_nro from "
+                "select * from "
               + "(select * from tilaus where tilaaja='" + user.email + "' and tila='avoin') as t "
-              + " inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro; "
+              + " inner join teos on teos.tilaus_nro=t.nro"
               + ";";
             stmt.executeQuery(query);
             rs = stmt.executeQuery(query);
             if(!rs.isBeforeFirst()) {
                 println("No open orders.");
             }
+
+            println("Cart:");
+            // loop over physical books (teos)
             while( rs.next() )
             {
-                // @todo print details about the book
-                println("Book: " + rs.getInt("kirja_nro") + " in order.");
+                int bookId =  rs.getInt("kirja_nro");
+                query =
+                    "select * from kirja where nro=" + bookId
+                    ;
+                Statement stmt2 = conn.createStatement();
+                ResultSet rsbook = stmt2.executeQuery(query);
+                if( rsbook.next() )
+                {
+                    println(rsbook.getString("tekija") + " - " + rsbook.getString("nimi")
+                            + " " + rsbook.getString("vuosi") + " : " + rsbook.getString("isbn")
+                            );
+                }
+                else
+                {
+                    error("Something wrong with books");
+                }
+                rsbook.close();
+                stmt2.close();
             }
+
             rs.close();
             stmt.close();
         } catch (SQLException e) {
@@ -508,18 +528,36 @@ class TikoMain
 
             log("TRACE", "Cool now we need to update order: " + orderId);
 
-            // Add to cart
-            pstm = conn.prepareStatement(
-                    "insert into tilaus_kirjat"
-                  + " (tilaus_nro, kirja_nro)"
-                  + " values (?, ?)");
-            pstm.setInt(1, orderId);
-            pstm.setInt(2, bookId);
+            int teosId = -1;
+            // find teosId
+            stmt = conn.createStatement();
+            query = "select nro, divari_nro from teos where kirja_nro=" + bookId + " and tilaus_nro is null";
+            rs = stmt.executeQuery(query);
+            if ( rs.next() ) {
+                teosId = rs.getInt("nro");
 
-            pstm.executeUpdate();
+                // Add to cart
+                // @todo removing tilaus_kirjat
+                // replace the kirja_nro with teos_nro
+                // and join to teos instead of tilaus_kirjat
+                //
+                // update teos which is added to cart
+                // first teos with tilaus_nro == null
+                pstm = conn.prepareStatement(
+                      "update teos set tilaus_nro =? where nro =?"
+                      );
+                pstm.setInt(1, orderId);
+                pstm.setInt(2, teosId);
 
-            conn.commit();
-            pstm.close();
+                pstm.executeUpdate();
+                conn.commit();
+                pstm.close();
+            }
+            else
+            {
+                error("Couldn't find a teos for the selected book");
+            }
+
 
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
@@ -550,43 +588,85 @@ class TikoMain
         String query;
         try {
             stmt = conn.createStatement();
+            stmt.execute("SET SEARCH_PATH TO keskus");
             query = "select * from tilaus where " +
                 "tilaaja='" + user.email +"'" + " and " +
                 "tila='avoin'" +
                 ";";
-            stmt.executeQuery(query);
-            int orderId = -1;
             ResultSet rs = stmt.executeQuery(query);
 
             // found an order
             if ( rs.next() ) {
-                orderId = rs.getInt("nro");
+                int orderId = rs.getInt("nro");
 
                 rs.close();
 
-                // Calculate the postage
-                // Prompt a confirmation
+                // @todo Calculate the postage
+
+                // print info before confirmation
+                // need to retrieve from SQL using the order id
                 //  - print address
                 //  - books in the order
                 //  - postage
                 //  - final price
-                String ans = inputPrompt("Confirm order: ", yes_no_regex, "");
-                log("TRACE", "'" + ans + "'");
-                if(ans.equals("yes"))
+                stmt.close();
+                // @todo query should be to books not teos (intermediat result)
+                //query = "select * from teos where tilaus_nro=" + orderId
+                query = "select tekija,nimi,paino,vuosi,isbn,hinta,divari_nro"
+                      + " from kirja inner join"
+                      + " (select * from teos where tilaus_nro=" + orderId + ") as t"
+                      + " on kirja.nro=t.kirja_nro"
+                        ;
+                stmt = conn.createStatement();
+                rs = stmt.executeQuery(query);
+                println("Order:");
+                float weight = 0;
+                float total = 0;
+                while(rs.next())
                 {
-                    // Do order
-                    PreparedStatement pstm = conn.prepareStatement(
-                            "update tilaus set tila =? where nro =?");
-                    pstm.setString(1, "maksettu");
-                    pstm.setInt(2, orderId);
-                    pstm.executeUpdate();
+                    println("\t" + rs.getString("tekija") + " - " + rs.getString("nimi")
+                            + " : " + rs.getFloat("hinta") + "e");
+                    weight += rs.getFloat("paino");
+                    total += rs.getFloat("hinta");
+                }
 
-                    pstm.close();
-                    conn.commit();
+                // postage
+                rs.close();
+                stmt.close();
+                stmt = conn.createStatement();
+                rs = stmt.executeQuery("select hinta from postikulut where paino>=" + weight);
+                println("Weight : " + weight);
+                float postage = -1;
+                if(rs.next())
+                {
+                    postage = rs.getFloat("hinta");
+                    total += postage;
+                    println("Postage : " + postage + "e");
+                    println("Total : " + total + "e");
+
+                    // Prompt a confirmation
+                    String ans = inputPrompt("Confirm order (yes/no): ", yes_no_regex, "");
+                    log("TRACE", "'" + ans + "'");
+                    if(ans.equals("yes"))
+                    {
+                        // Do order
+                        PreparedStatement pstm = conn.prepareStatement(
+                                "update tilaus set tila =? where nro =?");
+                        pstm.setString(1, "maksettu");
+                        pstm.setInt(2, orderId);
+                        pstm.executeUpdate();
+
+                        pstm.close();
+                        conn.commit();
+                    }
+                    else
+                    {
+                        println("Cancelled order : your cart is intact");
+                    }
                 }
                 else
                 {
-                    println("Cancelled order : your cart is intact");
+                    println("Too heavy. Sorry can't send it to you, our postage system sucks.");
                 }
             }
             else
@@ -619,8 +699,9 @@ class TikoMain
             ResultSet rs = stmt.executeQuery(query);
 
             while ( rs.next() ) {
-                int orderId = rs.getInt("nro");
-                println("Order: " + orderId);
+                Date d = rs.getTimestamp("pvm");
+                String state = rs.getString("tila");
+                println(d + " : " + state);
             }
 
             rs.close();
@@ -713,7 +794,7 @@ class TikoMain
                 count++;
                 priceSum += book.price();
             } else {
-                println(category.toUpperCase() + ": total sale price: " 
+                println(category.toUpperCase() + ": total sale price: "
                     + priceSum  + "e mean price: " + priceSum / count + "e\n");
                 category = book.category();
                 count = 1;
@@ -721,7 +802,7 @@ class TikoMain
             }
             println( book.toString() + "\n" );
         }
-        println(category.toUpperCase() + ": total sale price: " 
+        println(category.toUpperCase() + ": total sale price: "
             + priceSum  + "e mean price: " + priceSum / count + "e\n");
     }
 
@@ -970,7 +1051,6 @@ class TikoMain
             User user = new User();
             while (true)
             {
-                // @todo print the logged in username (ala Linux) if the user has logged in
                 if(user.valid())
                 { System.out.print(user.email + " : "); }
                 else
@@ -979,6 +1059,9 @@ class TikoMain
                 if (!parseCmd(conn, user, line))
                 { break; }
             }
+
+            // @todo cleanup any open orders
+
             conn.close();
         } catch (Exception e) {
              e.printStackTrace();

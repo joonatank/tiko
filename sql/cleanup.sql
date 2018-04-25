@@ -6,7 +6,9 @@ drop table keskus.tilaus cascade;
 drop table keskus.teos cascade;
 drop table keskus.kirja cascade;
 drop table keskus.kayttaja cascade;
-drop table keskus.myy cascade;
+--drop table keskus.myy cascade;
+drop table keskus.tilaus_postikulut cascade;
+drop table keskus.postikulut cascade;
 
 --set search_path to div1;
 drop table div1.teos cascade;

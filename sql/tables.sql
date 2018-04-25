@@ -7,9 +7,8 @@ create table kayttaja (email varchar(255), nimi varchar(255),
     salasana varchar(255), osoite varchar(255), puh_nro varchar(12),
     kayttooikeus varchar(16),
     primary key (email) );
--- @todo add year
 create table kirja (nro int, tekija varchar(255), nimi varchar(255),
-    tyyppi varchar(255), luokka varchar(255), isbn varchar(13),
+    tyyppi varchar(255), luokka varchar(255), isbn varchar(13), vuosi int,
     primary key (nro) );
 -- tilat: avoin, maksettu, lahetetty
 -- lahetetty on turha, koska meilla ei ole lahetysjarjestelmaa
@@ -17,12 +16,6 @@ create table tilaus(nro int, tilaaja varchar(255), pvm date,
     tila varchar(16),
     foreign key (tilaaja) references kayttaja(email),
     primary key (nro) );
--- onko tilaus_kirjat turha? tilauksen kirjat saa liittämällä
--- kirja, teos, ja tilaus taulut, kun lisäsin teokselle tilaus_nro
-create table tilaus_kirjat (tilaus_nro int, kirja_nro int,
-    foreign key (tilaus_nro) references tilaus(nro),
-    foreign key (kirja_nro) references kirja(nro),
-    primary key (tilaus_nro, kirja_nro) );
 create table divari (nro int, nimi varchar(255), osoite varchar(255),
     web_sivu varchar(255),
     primary key (nro) );
@@ -32,6 +25,11 @@ create table teos (nro int, paino float, kirja_nro int, hinta float,
     foreign key (divari_nro) references divari(nro),
     foreign key (tilaus_nro) references tilaus(nro),
     primary key (nro) );
+-- tarvitaan koska tilauksessa on N kirjaa, viite vaihdettu teokseen
+create table tilaus_kirjat (tilaus_nro int, teos_nro int,
+    foreign key (tilaus_nro) references tilaus(nro),
+    foreign key (teos_nro) references teos(nro),
+    primary key (tilaus_nro, teos_nro) );
 
 -- @todo hinta avaimeksi päivitä ER,
 -- hinta parempi avain,
