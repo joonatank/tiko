@@ -34,6 +34,33 @@ import tiko.BookInfo;
 // @todo add SQL connection
 class TikoMain
 {
+    public static final String HELP_TXT =
+                 "Available commands:"
+        + "\n" + "login - log in to the service, mandatory for most commands"
+        + "\n" + "register - register a new user"
+        + "\n" + "info - what we have stored about your user account"
+        + "\n" + "add_to_cart bookId - add a book with an id to the shopping cart"
+        + "\n" + "show_cart - show the shoppin cart"
+        + "\n" + "order - order the books in the shopping cart"
+        + "\n" + "show_orders - show previous orders"
+        + "\n" + "add_book"
+        + "\n" + "sell_book"
+        + "\n" + "search"
+        + "\n" + "exit or quit - exit the program"
+        + "\n" + "help - print this help"
+        + "\n"
+        ;
+
+    // username==email
+    static final String email_regex = "\\S+@\\S+\\.\\w+";
+    static final String password_regex = "\\S{6}\\S*";
+    // @todo Address regex allows anything
+    static final String address_regex = ".+";
+    // @todo this needs the option for +358 numbers (or other country codes)
+    static final String phone_regex = "\\d{6,10}";
+    static final String yes_no_regex = "(yes|no)";
+
+
     /// Helpers for printin and formating
     public static void log(String tag, String str)
     {
@@ -108,9 +135,10 @@ class TikoMain
         return ret;
     }
 
-    /// Return false if program should exit
-    /// True otherwise
-    /// Executes the users commands
+    /** Executes the users commands
+     *
+     *  @return false if program should exit, true otherwise
+     */
     public static boolean parseCmd(Connection conn, User user, String command)
     {
         // @todo this should be ArrayList with each parameter separated
@@ -136,10 +164,14 @@ class TikoMain
                 addToCart(conn, user, params);
                 return true;
             case "cart":
+            case "show_cart":
                 showCart(conn, user);
                 return true;
             case "order":
                 order(conn, user);
+                return true;
+            case "show_orders":
+                showOrders(conn, user);
                 return true;
             case "add_book":
                 addBook(conn);
@@ -156,22 +188,24 @@ class TikoMain
             case "exit":
             case "quit":
                 return false;
+            case "help":
+                help(conn, user);
+                return true;
             default:
                 error("Faulty command.");
+                help(conn, user);
+                return true;
         }
-        return true;
     }
 
-    // todo username==email, fix regex to that format
-    static final String email_regex = "\\S+@\\S+\\.\\w+";
-    static final String password_regex = "\\S{6}\\S*";
-    // @todo Address needs to have whitespace
-    static final String address_regex = ".+";
-    // @todo how many numbers? 6-10
-    // @todo this needs the option for +358 numbers (or other country codes)
-    static final String phone_regex = "\\d{6,10}";
+    /** Print the help text
+     */
+    public static void help(Connection conn, User user)
+    {
+        println(HELP_TXT);
+    }
 
-     /// Connect to the SQL server and verify
+    /// Connect to the SQL server and verify
     /// Keeps asking till user provides correct username/password
     /// @todo provide a method for escaping from the loop
     /// @todo return a User when connected
@@ -256,10 +290,9 @@ class TikoMain
         // would be good UI design
         String email = inputPrompt("username", email_regex, email_help);
         String password = inputPrompt("password", password_regex, pw_help);
+        // @todo add confirm password
         // @todo name regex
         String name = inputPrompt("Name", address_regex, "");
-        // @todo add confirm password
-        // @todo fix regex
         String address = inputPrompt("Address", address_regex, "");
         // @todo this needs space removal (of the input number)
         String phone = inputPrompt("phonenumber", phone_regex, "");
@@ -332,7 +365,7 @@ class TikoMain
             // inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro;
             String query =
                 "select kirja_nro from "
-              + "(select * from tilaus where tilaaja='" + user.email + "') as t "
+              + "(select * from tilaus where tilaaja='" + user.email + "' and tila='avoin') as t "
               + " inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro; "
               + ";";
             stmt.executeQuery(query);
@@ -373,15 +406,16 @@ class TikoMain
         return id;
     }
 
-    /** Iffy design decission to have the cart only for user that are logged in
+    /** Add a book into the users shopping cart
+     *  Orders are saved in the Database, so retrieves and creates one there.
+     *
+     *  @param conn : database connection
+     *  @param user : logged in user
+     *  @param params : commandline params (bookId as params[0])
+     *  @return true if added succesfully, false otherwise
+     *
+     *  Iffy design decission to have the cart only for user that are logged in
      *  in a real application we would use a temporary cart/user for this
-     *
-     *  Orders are saved in the Database, so retrieves and creates one there
-     *
-     * @param conn : database connection
-     * @param user : logged in user
-     * @param params : commandline params (bookId as params[0])
-     * @return true if added succesfully, false otherwise
      */
     public static boolean addToCart(Connection conn, User user, String [] params)
     {
@@ -493,7 +527,12 @@ class TikoMain
         return false;
     }
 
-    /// @return true if ordered succesfully, false otherwise
+    /** Order the current cart
+     *
+     *  @param conn Databese connection
+     *  @param user User making the order
+     *  @return true if ordered succesfully, false otherwise
+     */
     public static boolean order(Connection conn, User user)
     {
         if(!loggedIn(user))
@@ -505,8 +544,91 @@ class TikoMain
         //        update it's state in the SQL
         //        clear the user.order to -1
         // no ->  exit with an error
+        // Find an already existing order where to add
+        Statement stmt;
+        String query;
+        try {
+            stmt = conn.createStatement();
+            query = "select * from tilaus where " +
+                "tilaaja='" + user.email +"'" + " and " +
+                "tila='avoin'" +
+                ";";
+            stmt.executeQuery(query);
+            int orderId = -1;
+            ResultSet rs = stmt.executeQuery(query);
 
+            // found an order
+            if ( rs.next() ) {
+                orderId = rs.getInt("nro");
+
+                rs.close();
+
+                // Calculate the postage
+                // Prompt a confirmation
+                //  - print address
+                //  - books in the order
+                //  - postage
+                //  - final price
+                String ans = inputPrompt("Confirm order: ", yes_no_regex, "");
+                log("TRACE", "'" + ans + "'");
+                if(ans.equals("yes"))
+                {
+                    // Do order
+                    PreparedStatement pstm = conn.prepareStatement(
+                            "update tilaus set tila =? where nro =?");
+                    pstm.setString(1, "maksettu");
+                    pstm.setInt(2, orderId);
+                    pstm.executeUpdate();
+
+                    pstm.close();
+                    conn.commit();
+                }
+                else
+                {
+                    println("Cancelled order : your cart is intact");
+                }
+            }
+            else
+            {
+                println("No current order found, add books to cart first.");
+            }
+
+            stmt.close();
+        } catch (Exception e) {
+            error("Error: " + e.getMessage());
+        }
         return false;
+    }
+
+    /** Print all the orders by this user
+     *
+     *  @param conn Connection to Database
+     *  @param user whose orders we print
+     */
+    public static void showOrders(Connection conn, User user)
+    {
+        try {
+            Statement stmt = conn.createStatement();
+            String query =
+                "select * from tilaus where "
+              + "tilaaja='" + user.email +"'"
+              + ";";
+
+            stmt.execute("SET SEARCH_PATH TO keskus");
+            ResultSet rs = stmt.executeQuery(query);
+
+            while ( rs.next() ) {
+                int orderId = rs.getInt("nro");
+                println("Order: " + orderId);
+            }
+
+            rs.close();
+            stmt.close();
+
+        } catch (Exception e) {
+            error("Error: " + e.getMessage());
+        }
+
     }
 
     // prints books that fulfil search criteria
@@ -521,12 +643,12 @@ class TikoMain
             for (BookInfo book : books) {
                 println(book.toString() + "\n");
             }
-        } 
+        }
         else {
             String[] inputSplit = input.split("#");
             for (String str : inputSplit) {
                 String[] split = str.split(" ", 2);
-                
+
                 if (split.length < 2) {
                     continue;
                 }
@@ -545,21 +667,21 @@ class TikoMain
                             if ( !book.author().toLowerCase().contains(split[1].toLowerCase())) {
                                 books.remove(book);
                             }
-                        } 
+                        }
                         break;
                     case "category":
                         for (BookInfo book : in) {
                             if ( !book.category().toLowerCase().contains(split[1].toLowerCase())) {
                                 books.remove(book);
                             }
-                        } 
+                        }
                         break;
                     case "type":
                         for (BookInfo book : in) {
                             if ( !book.type().toLowerCase().contains(split[1].toLowerCase()) ) {
                                 books.remove(book);
                             }
-                        } 
+                        }
                         break;
                     default:
                         break;
