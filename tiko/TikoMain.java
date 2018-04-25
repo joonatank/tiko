@@ -203,6 +203,7 @@ class TikoMain
      */
     public static void help(Connection conn, User user)
     {
+        println("");
         println(HELP_TXT);
     }
 
@@ -361,13 +362,17 @@ class TikoMain
         try {
             stmt = conn.createStatement();
             stmt.execute("SET search_path to keskus");
-            // select kirja_nro from
-            // (select * from tilaus where tilaaja='j@foo.bar') as t
-            // inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro;
+            // select * from
+            // (select * from tilaus where tilaaja='j@foo.bar' and tila='avoin') as t
+            // inner join teos on teos.tilaus_nro=t.nro;
+            //
+            // @todo need to print the teos info with teos_nro
+            // orderId = select tilaus_nro from tilaus.where tilaaja='user.email' and tila='avoin'
+            // select * from teos where tilaus_nro = orderId;
             String query =
-                "select kirja_nro from "
+                "select * from "
               + "(select * from tilaus where tilaaja='" + user.email + "' and tila='avoin') as t "
-              + " inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro; "
+              + " inner join teos on teos.tilaus_nro=t.nro"
               + ";";
             stmt.executeQuery(query);
             rs = stmt.executeQuery(query);
@@ -508,18 +513,36 @@ class TikoMain
 
             log("TRACE", "Cool now we need to update order: " + orderId);
 
-            // Add to cart
-            pstm = conn.prepareStatement(
-                    "insert into tilaus_kirjat"
-                  + " (tilaus_nro, kirja_nro)"
-                  + " values (?, ?)");
-            pstm.setInt(1, orderId);
-            pstm.setInt(2, bookId);
+            int teosId = -1;
+            // find teosId
+            stmt = conn.createStatement();
+            query = "select nro, divari_nro from teos where kirja_nro=" + bookId + " and tilaus_nro is null";
+            rs = stmt.executeQuery(query);
+            if ( rs.next() ) {
+                teosId = rs.getInt("nro");
 
-            pstm.executeUpdate();
+                // Add to cart
+                // @todo removing tilaus_kirjat
+                // replace the kirja_nro with teos_nro
+                // and join to teos instead of tilaus_kirjat
+                //
+                // update teos which is added to cart
+                // first teos with tilaus_nro == null
+                pstm = conn.prepareStatement(
+                      "update teos set tilaus_nro =? where nro =?"
+                      );
+                pstm.setInt(1, orderId);
+                pstm.setInt(2, teosId);
 
-            conn.commit();
-            pstm.close();
+                pstm.executeUpdate();
+                conn.commit();
+                pstm.close();
+            }
+            else
+            {
+                error("Couldn't find a teos for the selected book");
+            }
+
 
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
@@ -564,12 +587,16 @@ class TikoMain
 
                 rs.close();
 
-                // Calculate the postage
-                // Prompt a confirmation
+                // @todo Calculate the postage
+
+                // print info before confirmation
+                // need to retrieve from SQL using the order id
                 //  - print address
                 //  - books in the order
                 //  - postage
                 //  - final price
+
+                // Prompt a confirmation
                 String ans = inputPrompt("Confirm order: ", yes_no_regex, "");
                 log("TRACE", "'" + ans + "'");
                 if(ans.equals("yes"))
@@ -713,7 +740,7 @@ class TikoMain
                 count++;
                 priceSum += book.price();
             } else {
-                println(category.toUpperCase() + ": total sale price: " 
+                println(category.toUpperCase() + ": total sale price: "
                     + priceSum  + "e mean price: " + priceSum / count + "e\n");
                 category = book.category();
                 count = 1;
@@ -721,7 +748,7 @@ class TikoMain
             }
             println( book.toString() + "\n" );
         }
-        println(category.toUpperCase() + ": total sale price: " 
+        println(category.toUpperCase() + ": total sale price: "
             + priceSum  + "e mean price: " + priceSum / count + "e\n");
     }
 
@@ -977,6 +1004,9 @@ class TikoMain
                 if (!parseCmd(conn, user, line))
                 { break; }
             }
+
+            // @todo cleanup any open orders
+
             conn.close();
         } catch (Exception e) {
              e.printStackTrace();
