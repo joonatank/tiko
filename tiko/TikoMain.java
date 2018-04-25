@@ -40,7 +40,7 @@ class TikoMain
         + "\n" + "register - register a new user"
         + "\n" + "info - what we have stored about your user account"
         + "\n" + "add_to_cart bookId - add a book with an id to the shopping cart"
-        + "\n" + "cart - show the shoppin cart"
+        + "\n" + "show_cart - show the shoppin cart"
         + "\n" + "order - order the books in the shopping cart"
         + "\n" + "show_orders - show previous orders"
         + "\n" + "add_book"
@@ -50,6 +50,16 @@ class TikoMain
         + "\n" + "help - print this help"
         + "\n"
         ;
+
+    // username==email
+    static final String email_regex = "\\S+@\\S+\\.\\w+";
+    static final String password_regex = "\\S{6}\\S*";
+    // @todo Address regex allows anything
+    static final String address_regex = ".+";
+    // @todo this needs the option for +358 numbers (or other country codes)
+    static final String phone_regex = "\\d{6,10}";
+    static final String yes_no_regex = "(yes|no)";
+
 
     /// Helpers for printin and formating
     public static void log(String tag, String str)
@@ -125,9 +135,10 @@ class TikoMain
         return ret;
     }
 
-    /// Return false if program should exit
-    /// True otherwise
-    /// Executes the users commands
+    /** Executes the users commands
+     *
+     *  @return false if program should exit, true otherwise
+     */
     public static boolean parseCmd(Connection conn, User user, String command)
     {
         // @todo this should be ArrayList with each parameter separated
@@ -153,6 +164,7 @@ class TikoMain
                 addToCart(conn, user, params);
                 return true;
             case "cart":
+            case "show_cart":
                 showCart(conn, user);
                 return true;
             case "order":
@@ -182,16 +194,6 @@ class TikoMain
                 return true;
         }
     }
-
-    // todo username==email, fix regex to that format
-    static final String email_regex = "\\S+@\\S+\\.\\w+";
-    static final String password_regex = "\\S{6}\\S*";
-    // @todo Address needs to have whitespace
-    static final String address_regex = ".+";
-    // @todo how many numbers? 6-10
-    // @todo this needs the option for +358 numbers (or other country codes)
-    static final String phone_regex = "\\d{6,10}";
-    static final String yes_no_regex = "(yes|no)";
 
     /** Print the help text
      */
@@ -285,10 +287,9 @@ class TikoMain
         // would be good UI design
         String email = inputPrompt("username", email_regex, email_help);
         String password = inputPrompt("password", password_regex, pw_help);
+        // @todo add confirm password
         // @todo name regex
         String name = inputPrompt("Name", address_regex, "");
-        // @todo add confirm password
-        // @todo fix regex
         String address = inputPrompt("Address", address_regex, "");
         // @todo this needs space removal (of the input number)
         String phone = inputPrompt("phonenumber", phone_regex, "");
@@ -402,15 +403,16 @@ class TikoMain
         return id;
     }
 
-    /** Iffy design decission to have the cart only for user that are logged in
+    /** Add a book into the users shopping cart
+     *  Orders are saved in the Database, so retrieves and creates one there.
+     *
+     *  @param conn : database connection
+     *  @param user : logged in user
+     *  @param params : commandline params (bookId as params[0])
+     *  @return true if added succesfully, false otherwise
+     *
+     *  Iffy design decission to have the cart only for user that are logged in
      *  in a real application we would use a temporary cart/user for this
-     *
-     *  Orders are saved in the Database, so retrieves and creates one there
-     *
-     * @param conn : database connection
-     * @param user : logged in user
-     * @param params : commandline params (bookId as params[0])
-     * @return true if added succesfully, false otherwise
      */
     public static boolean addToCart(Connection conn, User user, String [] params)
     {
