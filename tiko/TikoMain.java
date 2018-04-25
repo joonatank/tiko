@@ -34,6 +34,23 @@ import tiko.BookInfo;
 // @todo add SQL connection
 class TikoMain
 {
+    public static final String HELP_TXT =
+                 "Available commands:"
+        + "\n" + "login - log in to the service, mandatory for most commands"
+        + "\n" + "register - register a new user"
+        + "\n" + "info - what we have stored about your user account"
+        + "\n" + "add_to_cart bookId - add a book with an id to the shopping cart"
+        + "\n" + "cart - show the shoppin cart"
+        + "\n" + "order - order the books in the shopping cart"
+        + "\n" + "show_orders - show previous orders"
+        + "\n" + "add_book"
+        + "\n" + "sell_book"
+        + "\n" + "search"
+        + "\n" + "exit or quit - exit the program"
+        + "\n" + "help - print this help"
+        + "\n"
+        ;
+
     /// Helpers for printin and formating
     public static void log(String tag, String str)
     {
@@ -156,10 +173,14 @@ class TikoMain
             case "exit":
             case "quit":
                 return false;
+            case "help":
+                help(conn, user);
+                return true;
             default:
                 error("Faulty command.");
+                help(conn, user);
+                return true;
         }
-        return true;
     }
 
     // todo username==email, fix regex to that format
@@ -170,8 +191,16 @@ class TikoMain
     // @todo how many numbers? 6-10
     // @todo this needs the option for +358 numbers (or other country codes)
     static final String phone_regex = "\\d{6,10}";
+    static final String yes_no_regex = "(yes|no)";
 
-     /// Connect to the SQL server and verify
+    /** Print the help text
+     */
+    public static void help(Connection conn, User user)
+    {
+        println(HELP_TXT);
+    }
+
+    /// Connect to the SQL server and verify
     /// Keeps asking till user provides correct username/password
     /// @todo provide a method for escaping from the loop
     /// @todo return a User when connected
@@ -493,7 +522,12 @@ class TikoMain
         return false;
     }
 
-    /// @return true if ordered succesfully, false otherwise
+    /** Order the current cart
+     *
+     *  @param conn Databese connection
+     *  @param user User making the order
+     *  @return true if ordered succesfully, false otherwise
+     */
     public static boolean order(Connection conn, User user)
     {
         if(!loggedIn(user))
@@ -517,23 +551,43 @@ class TikoMain
             stmt.executeQuery(query);
             int orderId = -1;
             ResultSet rs = stmt.executeQuery(query);
+
             // found an order
             if ( rs.next() ) {
                 orderId = rs.getInt("nro");
 
                 rs.close();
 
-                // Do order
-                PreparedStatement pstm = conn.prepareStatement(
-                        "update tilaus set tila =? where nro =?");
-                pstm.setString(1, "maksettu");
-                pstm.setInt(2, orderId);
-                pstm.executeUpdate();
+                // Calculate the postage
+                // Prompt a confirmation
+                //  - print address
+                //  - books in the order
+                //  - postage
+                //  - final price
+                String ans = inputPrompt("Confirm order: ", yes_no_regex, "");
+                log("TRACE", "'" + ans + "'");
+                if(ans.equals("yes"))
+                {
+                    // Do order
+                    PreparedStatement pstm = conn.prepareStatement(
+                            "update tilaus set tila =? where nro =?");
+                    pstm.setString(1, "maksettu");
+                    pstm.setInt(2, orderId);
+                    pstm.executeUpdate();
 
-                pstm.close();
-                conn.commit();
-
+                    pstm.close();
+                    conn.commit();
+                }
+                else
+                {
+                    println("Cancelled order : your cart is intact");
+                }
             }
+            else
+            {
+                println("No current order found, add books to cart first.");
+            }
+
             stmt.close();
         } catch (Exception e) {
             error("Error: " + e.getMessage());
