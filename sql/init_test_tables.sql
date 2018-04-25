@@ -1,4 +1,11 @@
 set search_path to keskus;
+insert into postikulut values(.050, 1.4);
+insert into postikulut values(.100, 2.1);
+insert into postikulut values(.250, 2.8);
+insert into postikulut values(.500, 5.6);
+insert into postikulut values(1, 8.4);
+insert into postikulut values(2, 14);
+
 insert into kayttaja values('jotu@foo.com', 'Jotu Marjamaa', 'fooBar', 'FooBar 25', '252525252', 'user');
 insert into kayttaja values('j@foo.bar', 'Foo Bar', 'fooBar', 'FooBar 25', '252525252', 'user');
 insert into kayttaja values('admin@bar.com', 'admin', 'adminmf', 'Somewhere 25', '252525252', 'admin');
