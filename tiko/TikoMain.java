@@ -213,13 +213,9 @@ class TikoMain
     /// @return true if logged in succesfully, false otherwise
     public static boolean login(Connection conn, User user)
     {
-        log("TRACE", "login");
-
         String username = inputPrompt("username", email_regex, "");
         String pw = inputPrompt("password", password_regex, "");
 
-        log("TRACE", "username = " + username);
-        log("TRACE", "password = " + pw);
         // select statement
         try {
             Statement stmt = conn.createStatement(
@@ -255,7 +251,7 @@ class TikoMain
                 rs.close();
                 stmt.close();
 
-                print("Invalid username or password");
+                println("Invalid username or password");
                 return login(conn, user);
             }
 
@@ -281,8 +277,6 @@ class TikoMain
     /// doesn't return User object by design, you have to login afterwards
     public static boolean register(Connection conn)
     {
-        log("TRACE", "register");
-
         String pw_help = "at least 6 characters long, no whitespace";
         String email_help = "at least 6 characters long, no whitespace";
 
@@ -451,37 +445,31 @@ class TikoMain
 
         int bookId = Integer.parseInt(params[0]);
 
-        log("TRACE", "addToCart with " + bookId + " book.");
-
-        Statement stmt;
         PreparedStatement pstm;
-        ResultSet rs;
         try {
             // Check that the book is in the DB
-            stmt = conn.createStatement();
-            stmt.execute("SET search_path to keskus");
-            String query = "select nro from kirja where " +
-                " nro=" + bookId +
-                ";";
-            stmt.executeQuery(query);
-            rs = stmt.executeQuery(query);
-            if ( !rs.next() )
+            Statement teosStmt = conn.createStatement();
+            teosStmt.execute("SET search_path to keskus");
+            String query = "select * from myynnissa where"
+                         + " nro=" + bookId
+                           ;
+            teosStmt.executeQuery(query);
+            ResultSet teosRs = teosStmt.executeQuery(query);
+            if(!teosRs.isBeforeFirst())
             {
-                error("Book with id " + bookId + " not found.");
+                error("Teos with id " + bookId + " not found.");
                 return false;
             }
-            rs.close();
-            stmt.close();
 
             // Find an already existing order where to add
-            stmt = conn.createStatement();
+            Statement stmt = conn.createStatement();
             query = "select * from tilaus where " +
                 "tilaaja='" + user.email +"'" + " and " +
                 "tila='avoin'" +
                 ";";
             stmt.executeQuery(query);
             int orderId = -1;
-            rs = stmt.executeQuery(query);
+            ResultSet rs = stmt.executeQuery(query);
             // found an order
             if ( rs.next() ) {
                 orderId = rs.getInt("nro");
@@ -489,7 +477,7 @@ class TikoMain
                 rs.close();
                 stmt.close();
             }
-            // else take a count of the array and use that as a new order id
+            // take a count of the array and use that as a new order id
             // create a new order with the id
             else {
                 stmt.execute("SET search_path to keskus");
@@ -502,8 +490,6 @@ class TikoMain
                 else {
                     error("Something really fucked up with count.");
                 }
-
-                log("TRACE", "Cool now we need to add a new order: " + orderId);
 
                 pstm = conn.prepareStatement(
                         "insert into tilaus"
@@ -526,28 +512,17 @@ class TikoMain
                 return false;
             }
 
-            log("TRACE", "Cool now we need to update order: " + orderId);
-
-            int teosId = -1;
-            // find teosId
-            stmt = conn.createStatement();
-            query = "select nro, divari_nro from teos where kirja_nro=" + bookId + " and tilaus_nro is null";
-            rs = stmt.executeQuery(query);
-            if ( rs.next() ) {
-                teosId = rs.getInt("nro");
+            if ( teosRs.next() ) {
+                int teosId = bookId; //rs.getInt("nro");
 
                 // Add to cart
-                // @todo removing tilaus_kirjat
-                // replace the kirja_nro with teos_nro
-                // and join to teos instead of tilaus_kirjat
-                //
-                // update teos which is added to cart
-                // first teos with tilaus_nro == null
                 pstm = conn.prepareStatement(
                       "update teos set tilaus_nro =? where nro =?"
                       );
                 pstm.setInt(1, orderId);
                 pstm.setInt(2, teosId);
+
+                println("Added " + teosId + " to cart.");
 
                 pstm.executeUpdate();
                 conn.commit();
@@ -557,7 +532,6 @@ class TikoMain
             {
                 error("Couldn't find a teos for the selected book");
             }
-
 
         } catch (SQLException e) {
             error("Error: " + e.getMessage());
@@ -642,7 +616,6 @@ class TikoMain
 
                     // Prompt a confirmation
                     String ans = inputPrompt("Confirm order (yes/no): ", yes_no_regex, "");
-                    log("TRACE", "'" + ans + "'");
                     if(ans.equals("yes"))
                     {
                         // Do order
@@ -651,6 +624,8 @@ class TikoMain
                         pstm.setString(1, "maksettu");
                         pstm.setInt(2, orderId);
                         pstm.executeUpdate();
+
+                        println("Ordered!");
 
                         pstm.close();
                         conn.commit();
@@ -1039,8 +1014,6 @@ class TikoMain
                 .getConnection("jdbc:postgresql://localhost:5432/" + dbname,
                 username, password);
             conn.setAutoCommit(false);
-
-            log("TRACE", "Opened database successfully");
 
             Scanner scanner = new Scanner(System.in);
             String line = "";

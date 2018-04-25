@@ -2,7 +2,7 @@
 
 TARGET = tiko/TikoMain.class
 
-SOURCES = tiko/TikoMain.java
+SOURCES = tiko/TikoMain.java tiko/User.java tiko/BookInfo.java
 
 all : $(TARGET)
 
