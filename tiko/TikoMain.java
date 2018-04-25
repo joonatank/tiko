@@ -43,9 +43,10 @@ class TikoMain
         + "\n" + "show_cart - show the shoppin cart"
         + "\n" + "order - order the books in the shopping cart"
         + "\n" + "show_orders - show previous orders"
-        + "\n" + "add_book"
-        + "\n" + "sell_book"
-        + "\n" + "search"
+        + "\n" + "add_book - admin: add book data to database / add books to stock"
+        + "\n" + "sell_book - add books for sale"
+        + "\n" + "search - search books"
+        + "\n" + "list - list avaible books sorted by category, show category total and mean price"
         + "\n" + "exit or quit - exit the program"
         + "\n" + "help - print this help"
         + "\n"
@@ -174,10 +175,10 @@ class TikoMain
                 showOrders(conn, user);
                 return true;
             case "add_book":
-                addBook(conn);
+                addBook(conn, user);
                 return true;
             case "sell_book":
-                sellBook(conn, null);
+                sellBook(conn, null, user);
                 return true;
             case "search":
                 searchBooks(conn, params);
@@ -760,11 +761,11 @@ class TikoMain
 
     // insert book info to the div1 and keskus
     //
-    public static void addBook(Connection c)
+    public static void addBook(Connection c, User user)
     {
-        // @todo check user-role and permission
-        // @todo change database to the corresponding schema
-        // @todo add params: database name
+        if ( !user.admin ) {
+            println("Only admins can add books");
+        }
         // (nro int, tekija string, nimi string, tyyppi string, luokka string, isbn string)
         String sqlBook = "INSERT INTO kirja VALUES(?, ?, ?, ?, ?, ?)";
 
@@ -820,7 +821,7 @@ class TikoMain
             if (addCopy) {
                 addCopyDiv1(c, bookId);
                 if ( inputPrompt("sell in hub (y/n)", "(y|n)", "").equals("y") ) {
-                    sellBook(c, isbn);
+                    sellBook(c, isbn, user);
                 }
             }
             stmt.close();
@@ -865,9 +866,11 @@ class TikoMain
 
     // gets bookId from keskus.kirja and adds selling copy
     // to keskus.
-    public static void sellBook(Connection c, String isbn)
+    public static void sellBook(Connection c, String isbn, User user)
     {
-        // @todo check permission
+        if ( !user.admin ) {
+            println("Only admins can sell books");
+        }
         try {
             Statement stmt = c.createStatement();
             stmt.execute("SET SEARCH_PATH TO keskus");
