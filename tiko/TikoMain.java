@@ -141,6 +141,9 @@ class TikoMain
             case "order":
                 order(conn, user);
                 return true;
+            case "show_orders":
+                showOrders(conn, user);
+                return true;
             case "add_book":
                 addBook(conn);
                 return true;
@@ -329,7 +332,7 @@ class TikoMain
             // inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro;
             String query =
                 "select kirja_nro from "
-              + "(select * from tilaus where tilaaja='" + user.email + "') as t "
+              + "(select * from tilaus where tilaaja='" + user.email + "' and tila='avoin') as t "
               + " inner join tilaus_kirjat on t.nro = tilaus_kirjat.tilaus_nro; "
               + ";";
             stmt.executeQuery(query);
@@ -502,8 +505,71 @@ class TikoMain
         //        update it's state in the SQL
         //        clear the user.order to -1
         // no ->  exit with an error
+        // Find an already existing order where to add
+        Statement stmt;
+        String query;
+        try {
+            stmt = conn.createStatement();
+            query = "select * from tilaus where " +
+                "tilaaja='" + user.email +"'" + " and " +
+                "tila='avoin'" +
+                ";";
+            stmt.executeQuery(query);
+            int orderId = -1;
+            ResultSet rs = stmt.executeQuery(query);
+            // found an order
+            if ( rs.next() ) {
+                orderId = rs.getInt("nro");
 
+                rs.close();
+
+                // Do order
+                PreparedStatement pstm = conn.prepareStatement(
+                        "update tilaus set tila =? where nro =?");
+                pstm.setString(1, "maksettu");
+                pstm.setInt(2, orderId);
+                pstm.executeUpdate();
+
+                pstm.close();
+                conn.commit();
+
+            }
+            stmt.close();
+        } catch (Exception e) {
+            error("Error: " + e.getMessage());
+        }
         return false;
+    }
+
+    /** Print all the orders by this user
+     *
+     *  @param conn Connection to Database
+     *  @param user whose orders we print
+     */
+    public static void showOrders(Connection conn, User user)
+    {
+        try {
+            Statement stmt = conn.createStatement();
+            String query =
+                "select * from tilaus where "
+              + "tilaaja='" + user.email +"'"
+              + ";";
+
+            stmt.execute("SET SEARCH_PATH TO keskus");
+            ResultSet rs = stmt.executeQuery(query);
+
+            while ( rs.next() ) {
+                int orderId = rs.getInt("nro");
+                println("Order: " + orderId);
+            }
+
+            rs.close();
+            stmt.close();
+
+        } catch (Exception e) {
+            error("Error: " + e.getMessage());
+        }
+
     }
 
     // prints books that fulfil search criteria
@@ -517,12 +583,12 @@ class TikoMain
             for (BookInfo book : books) {
                 println(book.toString());
             }
-        } 
+        }
         else {
             String[] inputSplit = input.split("#");
             for (String str : inputSplit) {
                 String[] split = str.split(" ", 2);
-                
+
                 if (split.length < 2) {
                     continue;
                 }
@@ -541,21 +607,21 @@ class TikoMain
                             if ( !book.author().toLowerCase().contains(split[1].toLowerCase())) {
                                 books.remove(book);
                             }
-                        } 
+                        }
                         break;
                     case "category":
                         for (BookInfo book : in) {
                             if ( !book.category().toLowerCase().contains(split[1].toLowerCase())) {
                                 books.remove(book);
                             }
-                        } 
+                        }
                         break;
                     case "type":
                         for (BookInfo book : in) {
                             if ( !book.type().toLowerCase().contains(split[1].toLowerCase()) ) {
                                 books.remove(book);
                             }
-                        } 
+                        }
                         break;
                     default:
                         break;

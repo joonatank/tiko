@@ -11,6 +11,8 @@ create table kayttaja (email varchar(255), nimi varchar(255),
 create table kirja (nro int, tekija varchar(255), nimi varchar(255),
     tyyppi varchar(255), luokka varchar(255), isbn varchar(13),
     primary key (nro) );
+-- tilat: avoin, maksettu, lahetetty
+-- lahetetty on turha, koska meilla ei ole lahetysjarjestelmaa
 create table tilaus(nro int, tilaaja varchar(255), pvm date,
     tila varchar(16),
     foreign key (tilaaja) references kayttaja(email),
