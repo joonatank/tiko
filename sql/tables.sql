@@ -1,5 +1,3 @@
--- Mahdolliset arvot tilaus.tila: avoin, lahetetty
-
 -- Luo Keskusdivarin schema
 create schema keskus;
 set search_path to keskus;
@@ -40,6 +38,7 @@ create table tilaus_postikulut (tilaus_nro int, posti_paino float,
     foreign key (tilaus_nro) references tilaus(nro),
     foreign key (posti_paino) references postikulut(paino),
     primary key (tilaus_nro, posti_paino) );
+
 
 -- Luo Divari 1 schema
 create schema div1;
