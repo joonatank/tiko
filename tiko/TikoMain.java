@@ -251,7 +251,7 @@ class TikoMain
                 rs.close();
                 stmt.close();
 
-                print("Invalid username or password");
+                println("Invalid username or password");
                 return login(conn, user);
             }
 
