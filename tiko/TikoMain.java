@@ -150,6 +150,9 @@ class TikoMain
             case "search":
                 searchBooks(conn, params);
                 return true;
+            case "list":
+                printCategoryInfo(conn);
+                return true;
             case "exit":
             case "quit":
                 return false;
@@ -507,15 +510,16 @@ class TikoMain
     }
 
     // prints books that fulfil search criteria
+    // @todo use params if available
     public static void searchBooks(Connection c, String[] params)
     {
         String instruction = "Crtiteria: use #title #author #category or"
             + " #type to specify where to search\n";
         String input = inputPrompt(instruction, ".*", "");
-        ArrayList<BookInfo> books = listAvaibleBooks(c);
+        ArrayList<BookInfo> books = listAvaibleBooks(c, "ORDER BY nimi, tekija, luokka");
         if (input.length() == 0) {
             for (BookInfo book : books) {
-                println(book.toString());
+                println(book.toString() + "\n");
             }
         } 
         else {
@@ -566,22 +570,50 @@ class TikoMain
                 println("0 books found.");
             } else {
                 for (BookInfo book : books) {
-                    println(book.toString());
+                    println(book.toString() + "\n");
                 }
             }
         } // end else
     }
 
+    public static void printCategoryInfo(Connection c)
+    {
+        ArrayList<BookInfo> books = listAvaibleBooks(c, "ORDER BY luokka, nimi, tekija");
+        if (books.size() == 0){
+            return;
+        }
+        String category = books.get(0).category();
+        int count = 0;
+        float priceSum = 0;
+        for (BookInfo book : books) {
+            if ( book.category().equals(category) ) {
+                count++;
+                priceSum += book.price();
+            } else {
+                println(category.toUpperCase() + ": total sale price: " 
+                    + priceSum  + "e mean price: " + priceSum / count + "e\n");
+                category = book.category();
+                count = 1;
+                priceSum = book.price();
+            }
+            println( book.toString() + "\n" );
+        }
+        println(category.toUpperCase() + ": total sale price: " 
+            + priceSum  + "e mean price: " + priceSum / count + "e\n");
+    }
+
     // query all avaible books from keskus.
     // return books in ArrayList
-    public static ArrayList<BookInfo> listAvaibleBooks(Connection c)
+    // param: concatSql is added to "SELECT * FROM myynnissa "-query,
+    //        use empty string if WHERE / ORDER BY is not needed.
+    public static ArrayList<BookInfo> listAvaibleBooks(Connection c, String concatSql)
     {
         ArrayList<BookInfo> books = new ArrayList<BookInfo>();
         try {
             // @todo ääkköset katoaa?
             Statement stmt = c.createStatement();
             stmt.execute("SET SEARCH_PATH TO keskus");
-            ResultSet rs = stmt.executeQuery("SELECT * FROM myynnissa");
+            ResultSet rs = stmt.executeQuery("SELECT * FROM myynnissa " + concatSql);
             while(rs.next()) {
                 int id = rs.getInt("nro");
                 String name = rs.getString("nimi");
